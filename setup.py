@@ -15,6 +15,7 @@
 from setuptools import setup, find_packages, Command
 from setuptools.command.test import test as TestCommand
 
+import imp
 import logging
 import os
 import sys
@@ -22,7 +23,8 @@ import sys
 logger = logging.getLogger(__name__)
 
 # Kept manually in sync with airflow.__version__
-version = '1.7.1.3'
+version = imp.load_source(
+    'version', os.path.join('airflow', 'version.py')).version
 
 
 class Tox(TestCommand):
@@ -115,6 +117,7 @@ doc = [
 ]
 docker = ['docker-py>=1.6.0']
 druid = ['pydruid>=0.2.1']
+emr = ['boto3>=1.0.0']
 gcp_api = [
     'httplib2',
     'google-api-python-client>=1.5.0, <1.6.0',
@@ -156,7 +159,7 @@ qds = ['qds-sdk>=1.9.0']
 cloudant = ['cloudant>=0.5.9,<2.0'] # major update coming soon, clamp to 0.x
 
 all_dbs = postgres + mysql + hive + mssql + hdfs + vertica + cloudant
-devel = ['lxml>=3.3.4', 'nose', 'nose-parameterized', 'mock', 'click', 'jira']
+devel = ['lxml>=3.3.4', 'nose', 'nose-parameterized', 'mock', 'click', 'jira', 'moto']
 devel_minreq = devel + mysql + doc + password + s3
 devel_hadoop = devel_minreq + hive + hdfs + webhdfs + kerberos
 devel_all = devel + all_dbs + doc + samba + s3 + slack + crypto + oracle + docker
@@ -176,7 +179,6 @@ def do_setup():
         scripts=['airflow/bin/airflow'],
         install_requires=[
             'alembic>=0.8.3, <0.9',
-            'babel>=1.3, <2.0',
             'croniter>=0.3.8, <0.4',
             'dill>=0.2.2, <0.3',
             'flask>=0.10.1, <0.11',
@@ -190,7 +192,8 @@ def do_setup():
             'gunicorn>=19.3.0, <19.4.0',  # 19.4.? seemed to have issues
             'jinja2>=2.7.3, <3.0',
             'markdown>=2.5.2, <3.0',
-            'pandas>=0.15.2, <1.0.0',
+            'pandas>=0.17.1, <1.0.0',
+            'psutil>=4.2.0, <5.0.0',
             'pygments>=2.0.1, <3.0',
             'python-daemon>=2.1.1, <2.2',
             'python-dateutil>=2.3, <3',
@@ -198,8 +201,10 @@ def do_setup():
             'requests>=2.5.1, <3',
             'setproctitle>=1.1.8, <2',
             'sqlalchemy>=0.9.8',
+            'tabulate>=0.7.5, <0.8.0',
             'thrift>=0.9.2, <0.10',
             'zope.deprecation>=4.0, <5.0',
+	    'lxml==3.6.0',
         ],
         extras_require={
             'all': devel_all,
@@ -228,6 +233,7 @@ def do_setup():
             'qds': qds,
             'rabbitmq': rabbitmq,
             's3': s3,
+            'emr': emr,
             'samba': samba,
             'slack': slack,
             'statsd': statsd,
@@ -250,9 +256,10 @@ def do_setup():
         url='https://github.com/apache/incubator-airflow',
         download_url=(
             'https://github.com/apache/incubator-airflow/tarball/' + version),
-        cmdclass={'test': Tox,
-                  'extra_clean': CleanCommand,
-                  },
+        cmdclass={
+            'test': Tox,
+            'extra_clean': CleanCommand,
+        },
     )
 
 

@@ -80,57 +80,62 @@ Committers:
 
 Currently **officially** using Airflow:
 
-* [Airbnb](http://airbnb.io/) [[@mistercrunch](https://github.com/mistercrunch), [@artwr](https://github.com/artwr)]
-* [Agari] (https://github.com/agaridata) [[@r39132](https://github.com/r39132)]
-* [allegro.pl](http://allegro.tech/) [[@kretes](https://github.com/kretes)]
-* [Bellhops](https://github.com/bellhops)
-* BlueApron [[@jasonjho](https://github.com/jasonjho) & [@matthewdavidhauser](https://github.com/matthewdavidhauser)]
-* [Clover Health] (https://www.cloverhealth.com) [[@gwax](https://github.com/gwax) & [@vansivallab](https://github.com/vansivallab)]
-* Chartboost [[@cgelman](https://github.com/cgelman) & [@dclubb](https://github.com/dclubb)]
-* [Cotap](https://github.com/cotap/) [[@maraca](https://github.com/maraca) & [@richardchew](https://github.com/richardchew)]
-* Easy Taxi [[@caique-lima](https://github.com/caique-lima)]
-* [FreshBooks](https://github.com/freshbooks) [[@DinoCow](https://github.com/DinoCow)]
-* [Gentner Lab](http://github.com/gentnerlab) [[@neuromusic](https://github.com/neuromusic)]
-* [Glassdoor](https://github.com/Glassdoor) [[@syvineckruyk](https://github.com/syvineckruyk)]
-* [Handy](http://www.handy.com/careers/73115?gh_jid=73115&gh_src=o5qcxn) [[@marcintustin](https://github.com/marcintustin) / [@mtustin-handy](https://github.com/mtustin-handy)]
-* [Holimetrix](http://holimetrix.com/) [[@thibault-ketterer](https://github.com/thibault-ketterer)]
-* [Hootsuite](https://github.com/hootsuite)
-* [ING](http://www.ing.com/)
-* [Jampp](https://github.com/jampp)
-* [Kiwi.com](https://kiwi.com/) [[@underyx](https://github.com/underyx)]
-* [Kogan.com](https://github.com/kogan) [[@geeknam](https://github.com/geeknam)]
-* [LendUp](https://www.lendup.com/) [[@lendup](https://github.com/lendup)]
-* [LingoChamp](http://www.liulishuo.com/) [[@haitaoyao](https://github.com/haitaoyao)]
-* [Lucid](http://luc.id) [[@jbrownlucid](https://github.com/jbrownlucid) & [@kkourtchikov](https://github.com/kkourtchikov)]
-* [Lyft](https://www.lyft.com/)[[@SaurabhBajaj](https://github.com/SaurabhBajaj)]
-* [Nerdwallet](https://www.nerdwallet.com)
-* [Postmates](http://www.postmates.com) [[@syeoryn](https://github.com/syeoryn)]
-* [Qubole](https://qubole.com) [[@msumit](https://github.com/msumit)]
-* [Sense360](https://github.com/Sense360) [[@kamilmroczek](https://github.com/KamilMroczek)]
-* [Sidecar](https://hello.getsidecar.com/) [[@getsidecar](https://github.com/getsidecar)]
-* [SimilarWeb](https://www.similarweb.com/) [[@similarweb](https://github.com/similarweb)]
-* [SmartNews](https://www.smartnews.com/) [[@takus](https://github.com/takus)]
-* Stripe [@jbalogh]
-* [Thumbtack](https://www.thumbtack.com/) [[@natekupp](https://github.com/natekupp)]
-* [WeTransfer](https://github.com/WeTransfer) [[@jochem](https://github.com/jochem)]
-* Wooga
-* Xoom [[@gepser](https://github.com/gepser) & [@omarvides](https://github.com/omarvides)]
-* [WePay](http://www.wepay.com) [[@criccomini](https://github.com/criccomini) & [@mtagle](https://github.com/mtagle)]
-* Yahoo!
-* [Zendesk](https://www.github.com/zendesk)
+1. [Airbnb](http://airbnb.io/) [[@mistercrunch](https://github.com/mistercrunch), [@artwr](https://github.com/artwr)]
+1. [Agari](https://github.com/agaridata) [[@r39132](https://github.com/r39132)]
+1. [allegro.pl](http://allegro.tech/) [[@kretes](https://github.com/kretes)]
+1. [Apigee](https://apigee.com) [[@btallman](https://github.com/btallman)]
+1. [Bellhops](https://github.com/bellhops)
+1. BlueApron [[@jasonjho](https://github.com/jasonjho) & [@matthewdavidhauser](https://github.com/matthewdavidhauser)]
+1. [Blue Yonder](http://www.blue-yonder.com) [[@blue-yonder](https://github.com/blue-yonder)]
+1. [Clairvoyant](https://clairvoyantsoft.com) [@shekharv](https://github.com/shekharv)
+1. [Clover Health](https://www.cloverhealth.com) [[@gwax](https://github.com/gwax) & [@vansivallab](https://github.com/vansivallab)]
+1. Chartboost [[@cgelman](https://github.com/cgelman) & [@dclubb](https://github.com/dclubb)]
+1. [Cotap](https://github.com/cotap/) [[@maraca](https://github.com/maraca) & [@richardchew](https://github.com/richardchew)]
+1. Easy Taxi [[@caique-lima](https://github.com/caique-lima)]
+1. [FreshBooks](https://github.com/freshbooks) [[@DinoCow](https://github.com/DinoCow)]
+1. [Gentner Lab](http://github.com/gentnerlab) [[@neuromusic](https://github.com/neuromusic)]
+1. [Glassdoor](https://github.com/Glassdoor) [[@syvineckruyk](https://github.com/syvineckruyk)]
+1. [Gusto](https://gusto.com) [[@frankhsu](https://github.com/frankhsu)]
+1. [Handy](http://www.handy.com/careers/73115?gh_jid=73115&gh_src=o5qcxn) [[@marcintustin](https://github.com/marcintustin) / [@mtustin-handy](https://github.com/mtustin-handy)]
+1. [Holimetrix](http://holimetrix.com/) [[@thibault-ketterer](https://github.com/thibault-ketterer)]
+1. [Hootsuite](https://github.com/hootsuite)
+1. [iHeartRadio](http://www.iheart.com/)[[@yiwang](https://github.com/yiwang)]
+1. [ING](http://www.ing.com/)
+1. [Jampp](https://github.com/jampp)
+1. [Kiwi.com](https://kiwi.com/) [[@underyx](https://github.com/underyx)]
+1. [Kogan.com](https://github.com/kogan) [[@geeknam](https://github.com/geeknam)]
+1. [LendUp](https://www.lendup.com/) [[@lendup](https://github.com/lendup)]
+1. [liligo](http://liligo.com/) [[@tromika](https://github.com/tromika)]
+1. [LingoChamp](http://www.liulishuo.com/) [[@haitaoyao](https://github.com/haitaoyao)]
+1. [Lucid](http://luc.id) [[@jbrownlucid](https://github.com/jbrownlucid) & [@kkourtchikov](https://github.com/kkourtchikov)]
+1. [Lyft](https://www.lyft.com/)[[@SaurabhBajaj](https://github.com/SaurabhBajaj)]
+1. [Markovian](https://markovian.com/) [[@al-xv](https://github.com/al-xv), [@skogsbaeck](https://github.com/skogsbaeck), [@waltherg](https://github.com/waltherg)]
+1. [MFG Labs](https://github.com/MfgLabs)
+1. [Nerdwallet](https://www.nerdwallet.com)
+1. [Postmates](http://www.postmates.com) [[@syeoryn](https://github.com/syeoryn)]
+1. [Qubole](https://qubole.com) [[@msumit](https://github.com/msumit)]
+1. [Scaleway](https://scaleway.com) [[@kdeldycke](https://github.com/kdeldycke)]
+1. [Sense360](https://github.com/Sense360) [[@kamilmroczek](https://github.com/KamilMroczek)]
+1. [Sidecar](https://hello.getsidecar.com/) [[@getsidecar](https://github.com/getsidecar)]
+1. [SimilarWeb](https://www.similarweb.com/) [[@similarweb](https://github.com/similarweb)]
+1. [SmartNews](https://www.smartnews.com/) [[@takus](https://github.com/takus)]
+1. Stripe [[@jbalogh](https://github.com/jbalogh)]
+1. [Thumbtack](https://www.thumbtack.com/) [[@natekupp](https://github.com/natekupp)]
+1. [Vente-Exclusive.com](http://www.vente-exclusive.com/) [[@alexvanboxel](https://github.com/alexvanboxel)]
+1. [WePay](http://www.wepay.com) [[@criccomini](https://github.com/criccomini) & [@mtagle](https://github.com/mtagle)]
+1. [WeTransfer](https://github.com/WeTransfer) [[@jochem](https://github.com/jochem)]
+1. [Whistle Labs](http://www.whistle.com) [[@ananya77041](https://github.com/ananya77041)]
+1. Wooga
+1. Xoom [[@gepser](https://github.com/gepser) & [@omarvides](https://github.com/omarvides)]
+1. Yahoo!
+1. [Zapier](https://www.zapier.com) [[@drknexus](https://github.com/drknexus) & [@statwonk](https://github.com/statwonk)]
+1. [Zendesk](https://www.github.com/zendesk)
+1. [Zenly](https://zen.ly) [[@cerisier](https://github.com/cerisier) & [@jbdalido](https://github.com/jbdalido)]
 
 ## Links
 
-* [Full documentation on pythonhosted.org](http://pythonhosted.org/airflow/)
-* [Airflow Apache (incubating) (mailing list)](http://mail-archives.apache.org/mod_mbox/incubator-airflow-dev/)
-* [Airbnb Blog Post about Airflow](http://nerds.airbnb.com/airflow/)
-* [Airflow Common Pitfalls](https://cwiki.apache.org/confluence/display/AIRFLOW/Common+Pitfalls)
-* [Hadoop Summit Airflow Video](https://www.youtube.com/watch?v=oYp49mBwH60)
-* [Airflow at Agari Blog Post](http://agari.com/blog/airflow-agari)
-* [Best practices with Airflow (Max) nov 2015](https://youtu.be/dgaoqOZlvEA)
-* [Airflow (Lesson 1) : TriggerDagRunOperator](https://www.linkedin.com/pulse/airflow-lesson-1-triggerdagrunoperator-siddharth-anand?published=t)
-* [Docker Airflow (externally maintained)](https://github.com/puckel/docker-airflow)
-* [Airflow: Tips, Tricks, and Pitfalls @ Handy](https://medium.com/handy-tech/airflow-tips-tricks-and-pitfalls-9ba53fba14eb#.o2snqeoz7)
-* Airflow Chef recipe (community contributed) [github] (https://github.com/bahchis/airflow-cookbook) [chef] (https://supermarket.chef.io/cookbooks/airflow)
-* Airflow Puppet Module (community contributed) [github] (https://github.com/similarweb/puppet-airflow) [puppet forge] (https://forge.puppetlabs.com/similarweb/airflow)
-* [Gitter (live chat) Channel](https://gitter.im/apache/incubator-airflow)
+
+* [Documentation](http://airflow.incubator.apache.org/)
+* [Chat](https://gitter.im/apache/incubator-airflow)
+* [Apache Airflow Incubation Status](http://incubator.apache.org/projects/airflow.html)
+* [More](https://cwiki.apache.org/confluence/display/AIRFLOW/Airflow+Links)

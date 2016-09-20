@@ -17,6 +17,7 @@ from past.builtins import basestring
 from datetime import datetime
 import numpy
 import logging
+import sys
 
 from airflow.hooks.base_hook import BaseHook
 from airflow.exceptions import AirflowException
@@ -55,9 +56,8 @@ class DbApiHook(BaseHook):
             username=db.login,
             schema=db.schema)
 
-
     def get_pandas_df(self, sql, parameters=None):
-        '''
+        """
         Executes the sql and returns a pandas dataframe
 
         :param sql: the sql statement to be executed (str) or a list of
@@ -65,7 +65,9 @@ class DbApiHook(BaseHook):
         :type sql: str or list
         :param parameters: The parameters to render the SQL query with.
         :type parameters: mapping or iterable
-        '''
+        """
+        if sys.version_info[0] < 3:
+            sql = sql.encode('utf-8')
         import pandas.io.sql as psql
         conn = self.get_conn()
         df = psql.read_sql(sql, con=conn, params=parameters)
@@ -73,7 +75,7 @@ class DbApiHook(BaseHook):
         return df
 
     def get_records(self, sql, parameters=None):
-        '''
+        """
         Executes the sql and returns a set of records.
 
         :param sql: the sql statement to be executed (str) or a list of
@@ -81,7 +83,9 @@ class DbApiHook(BaseHook):
         :type sql: str or list
         :param parameters: The parameters to render the SQL query with.
         :type parameters: mapping or iterable
-        '''
+        """
+        if sys.version_info[0] < 3:
+            sql = sql.encode('utf-8')
         conn = self.get_conn()
         cur = self.get_cursor()
         if parameters is not None:
@@ -94,7 +98,7 @@ class DbApiHook(BaseHook):
         return rows
 
     def get_first(self, sql, parameters=None):
-        '''
+        """
         Executes the sql and returns the first resulting row.
 
         :param sql: the sql statement to be executed (str) or a list of
@@ -102,7 +106,9 @@ class DbApiHook(BaseHook):
         :type sql: str or list
         :param parameters: The parameters to render the SQL query with.
         :type parameters: mapping or iterable
-        '''
+        """
+        if sys.version_info[0] < 3:
+            sql = sql.encode('utf-8')
         conn = self.get_conn()
         cur = conn.cursor()
         if parameters is not None:
@@ -134,10 +140,12 @@ class DbApiHook(BaseHook):
             sql = [sql]
 
         if self.supports_autocommit:
-           self.set_autocommit(conn, autocommit)
+            self.set_autocommit(conn, autocommit)
 
         cur = conn.cursor()
         for s in sql:
+            if sys.version_info[0] < 3:
+                s = s.encode('utf-8')
             logging.info(s)
             if parameters is not None:
                 cur.execute(s, parameters)

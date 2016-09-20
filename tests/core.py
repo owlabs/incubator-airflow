@@ -34,10 +34,20 @@ from dateutil.relativedelta import relativedelta
 from airflow import configuration
 from airflow.executors import SequentialExecutor, LocalExecutor
 from airflow.models import Variable
+from tests.test_utils.fake_datetime import FakeDatetime
 
-configuration.test_mode()
-from airflow import jobs, models, DAG, operators, hooks, utils, macros, settings, exceptions
-from airflow.hooks import BaseHook
+configuration.load_test_config()
+from airflow import jobs, models, DAG, utils, macros, settings, exceptions
+from airflow.models import BaseOperator
+from airflow.operators.bash_operator import BashOperator
+from airflow.operators.check_operator import CheckOperator, ValueCheckOperator
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
+from airflow.operators.python_operator import PythonOperator
+from airflow.operators.dummy_operator import DummyOperator
+from airflow.operators.http_operator import SimpleHttpOperator
+from airflow.operators import sensors
+from airflow.hooks.base_hook import BaseHook
+from airflow.hooks.sqlite_hook import SqliteHook
 from airflow.bin import cli
 from airflow.www import app as application
 from airflow.settings import Session
@@ -67,13 +77,6 @@ except ImportError:
     import pickle
 
 
-class FakeDatetime(datetime):
-    "A fake replacement for datetime that can be mocked for testing."
-
-    def __new__(cls, *args, **kwargs):
-        return date.__new__(datetime, *args, **kwargs)
-
-
 def reset(dag_id=TEST_DAG_ID):
     session = Session()
     tis = session.query(models.TaskInstance).filter_by(dag_id=dag_id)
@@ -85,7 +88,7 @@ def reset(dag_id=TEST_DAG_ID):
 reset()
 
 
-class OperatorSubclass(operators.BaseOperator):
+class OperatorSubclass(BaseOperator):
     """
     An operator to test template substitution
     """
@@ -100,8 +103,14 @@ class OperatorSubclass(operators.BaseOperator):
 
 
 class CoreTest(unittest.TestCase):
+
+    # These defaults make the test faster to run
+    default_scheduler_args = {"file_process_interval": 0,
+                              "processor_poll_interval": 0.5,
+                              "num_runs": 1}
+
     def setUp(self):
-        configuration.test_mode()
+        configuration.load_test_config()
         self.dagbag = models.DagBag(
             dag_folder=DEV_NULL, include_examples=True)
         self.args = {'owner': 'airflow', 'start_date': DEFAULT_DATE}
@@ -122,7 +131,7 @@ class CoreTest(unittest.TestCase):
             owner='Also fake',
             start_date=datetime(2015, 1, 2, 0, 0)))
 
-        dag_run = jobs.SchedulerJob(test_mode=True).schedule_dag(dag)
+        dag_run = jobs.SchedulerJob(**self.default_scheduler_args).create_dag_run(dag)
         assert dag_run is not None
         assert dag_run.dag_id == dag.dag_id
         assert dag_run.run_id is not None
@@ -147,12 +156,13 @@ class CoreTest(unittest.TestCase):
             task_id="faketastic",
             owner='Also fake',
             start_date=DEFAULT_DATE))
-        scheduler = jobs.SchedulerJob(test_mode=True)
+
+        scheduler = jobs.SchedulerJob(**self.default_scheduler_args)
         dag.create_dagrun(run_id=models.DagRun.id_for_date(DEFAULT_DATE),
                           execution_date=DEFAULT_DATE,
                           state=State.SUCCESS,
                           external_trigger=True)
-        dag_run = scheduler.schedule_dag(dag)
+        dag_run = scheduler.create_dag_run(dag)
         assert dag_run is not None
         assert dag_run.dag_id == dag.dag_id
         assert dag_run.run_id is not None
@@ -174,8 +184,8 @@ class CoreTest(unittest.TestCase):
             task_id="faketastic",
             owner='Also fake',
             start_date=datetime(2015, 1, 2, 0, 0)))
-        dag_run = jobs.SchedulerJob(test_mode=True).schedule_dag(dag)
-        dag_run2 = jobs.SchedulerJob(test_mode=True).schedule_dag(dag)
+        dag_run = jobs.SchedulerJob(**self.default_scheduler_args).create_dag_run(dag)
+        dag_run2 = jobs.SchedulerJob(**self.default_scheduler_args).create_dag_run(dag)
 
         assert dag_run is not None
         assert dag_run2 is None
@@ -199,11 +209,11 @@ class CoreTest(unittest.TestCase):
 
         # Create and schedule the dag runs
         dag_runs = []
-        scheduler = jobs.SchedulerJob(test_mode=True)
+        scheduler = jobs.SchedulerJob(**self.default_scheduler_args)
         for i in range(runs):
-            dag_runs.append(scheduler.schedule_dag(dag))
+            dag_runs.append(scheduler.create_dag_run(dag))
 
-        additional_dag_run = scheduler.schedule_dag(dag)
+        additional_dag_run = scheduler.create_dag_run(dag)
 
         for dag_run in dag_runs:
             assert dag_run is not None
@@ -234,9 +244,9 @@ class CoreTest(unittest.TestCase):
                                          owner='Also fake'))
 
         dag_runs = []
-        scheduler = jobs.SchedulerJob(test_mode=True)
+        scheduler = jobs.SchedulerJob(**self.default_scheduler_args)
         for i in range(runs):
-            dag_run = scheduler.schedule_dag(dag)
+            dag_run = scheduler.create_dag_run(dag)
             dag_runs.append(dag_run)
 
             # Mark the DagRun as complete
@@ -245,7 +255,7 @@ class CoreTest(unittest.TestCase):
             session.commit()
 
         # Attempt to schedule an additional dag run (for 2016-01-01)
-        additional_dag_run = scheduler.schedule_dag(dag)
+        additional_dag_run = scheduler.create_dag_run(dag)
 
         for dag_run in dag_runs:
             assert dag_run is not None
@@ -305,11 +315,11 @@ class CoreTest(unittest.TestCase):
         assert hash(self.dag) != hash(dag_subclass)
 
     def test_time_sensor(self):
-        t = operators.sensors.TimeSensor(
+        t = sensors.TimeSensor(
             task_id='time_sensor_check',
             target_time=time(0),
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_check_operators(self):
 
@@ -319,21 +329,21 @@ class CoreTest(unittest.TestCase):
         captainHook.run("CREATE TABLE operator_test_table (a, b)")
         captainHook.run("insert into operator_test_table values (1,2)")
 
-        t = operators.CheckOperator(
+        t = CheckOperator(
             task_id='check',
             sql="select count(*) from operator_test_table",
             conn_id=conn_id,
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
-        t = operators.ValueCheckOperator(
+        t = ValueCheckOperator(
             task_id='value_check',
             pass_value=95,
             tolerance=0.1,
             conn_id=conn_id,
             sql="SELECT 100",
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         captainHook.run("drop table operator_test_table")
 
@@ -350,7 +360,7 @@ class CoreTest(unittest.TestCase):
         Tests that Operators reject illegal arguments
         """
         with warnings.catch_warnings(record=True) as w:
-            t = operators.BashOperator(
+            t = BashOperator(
                 task_id='test_illegal_args',
                 bash_command='echo success',
                 dag=self.dag,
@@ -362,34 +372,34 @@ class CoreTest(unittest.TestCase):
                 w[0].message.args[0])
 
     def test_bash_operator(self):
-        t = operators.BashOperator(
+        t = BashOperator(
             task_id='time_sensor_check',
             bash_command="echo success",
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_bash_operator_multi_byte_output(self):
-        t = operators.BashOperator(
+        t = BashOperator(
             task_id='test_multi_byte_bash_operator',
             bash_command=u"echo \u2600",
             dag=self.dag,
             output_encoding='utf-8')
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_trigger_dagrun(self):
         def trigga(context, obj):
             if True:
                 return obj
 
-        t = operators.TriggerDagRunOperator(
+        t = TriggerDagRunOperator(
             task_id='test_trigger_dagrun',
             trigger_dag_id='example_bash_operator',
             python_callable=trigga,
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_dryrun(self):
-        t = operators.BashOperator(
+        t = BashOperator(
             task_id='time_sensor_check',
             bash_command="echo success",
             dag=self.dag)
@@ -401,35 +411,74 @@ class CoreTest(unittest.TestCase):
             task_id='time_sqlite',
             sql="CREATE TABLE IF NOT EXISTS unitest (dummy VARCHAR(20))",
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_timedelta_sensor(self):
-        t = operators.sensors.TimeDeltaSensor(
+        t = sensors.TimeDeltaSensor(
             task_id='timedelta_sensor_check',
             delta=timedelta(seconds=2),
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_external_task_sensor(self):
-        t = operators.sensors.ExternalTaskSensor(
+        t = sensors.ExternalTaskSensor(
             task_id='test_external_task_sensor_check',
             external_dag_id=TEST_DAG_ID,
             external_task_id='time_sensor_check',
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_external_task_sensor_delta(self):
-        t = operators.sensors.ExternalTaskSensor(
+        t = sensors.ExternalTaskSensor(
             task_id='test_external_task_sensor_check_delta',
             external_dag_id=TEST_DAG_ID,
             external_task_id='time_sensor_check',
             execution_delta=timedelta(0),
             allowed_states=['success'],
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
+
+    def test_external_task_sensor_fn(self):
+        self.test_time_sensor()
+        # check that the execution_fn works
+        t = sensors.ExternalTaskSensor(
+            task_id='test_external_task_sensor_check_delta',
+            external_dag_id=TEST_DAG_ID,
+            external_task_id='time_sensor_check',
+            execution_date_fn=lambda dt: dt + timedelta(0),
+            allowed_states=['success'],
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
+
+        # double check that the execution is being called by failing the test
+        t2 = sensors.ExternalTaskSensor(
+            task_id='test_external_task_sensor_check_delta',
+            external_dag_id=TEST_DAG_ID,
+            external_task_id='time_sensor_check',
+            execution_date_fn=lambda dt: dt + timedelta(days=1),
+            allowed_states=['success'],
+            timeout=1,
+            poke_interval=1,
+            dag=self.dag)
+        with self.assertRaises(exceptions.AirflowSensorTimeout):
+            t2.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
+
+    def test_external_task_sensor_error_delta_and_fn(self):
+        """
+        Test that providing execution_delta and a function raises an error
+        """
+        with self.assertRaises(ValueError):
+            t = sensors.ExternalTaskSensor(
+                task_id='test_external_task_sensor_check_delta',
+                external_dag_id=TEST_DAG_ID,
+                external_task_id='time_sensor_check',
+                execution_delta=timedelta(0),
+                execution_date_fn=lambda dt: dt,
+                allowed_states=['success'],
+                dag=self.dag)
 
     def test_timeout(self):
-        t = operators.PythonOperator(
+        t = PythonOperator(
             task_id='test_timeout',
             execution_timeout=timedelta(seconds=1),
             python_callable=lambda: sleep(5),
@@ -437,20 +486,20 @@ class CoreTest(unittest.TestCase):
         self.assertRaises(
             exceptions.AirflowTaskTimeout,
             t.run,
-            start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_python_op(self):
         def test_py_op(templates_dict, ds, **kwargs):
             if not templates_dict['ds'] == ds:
                 raise Exception("failure")
 
-        t = operators.PythonOperator(
+        t = PythonOperator(
             task_id='test_py_op',
             provide_context=True,
             python_callable=test_py_op,
             templates_dict={'ds': "{{ ds }}"},
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_complex_template(self):
         def verify_templated_field(context):
@@ -460,11 +509,11 @@ class CoreTest(unittest.TestCase):
             task_id='test_complex_template',
             some_templated_field={
                 'foo': '123',
-                'bar': ['baz', ' {{ ds }}']
+                'bar': ['baz', '{{ ds }}']
             },
             on_success_callback=verify_templated_field,
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_template_with_variable(self):
         """
@@ -486,7 +535,7 @@ class CoreTest(unittest.TestCase):
             some_templated_field='{{ var.value.a_variable }}',
             on_success_callback=verify_templated_field,
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
         assert val['success']
 
     def test_template_with_json_variable(self):
@@ -509,7 +558,7 @@ class CoreTest(unittest.TestCase):
             some_templated_field='{{ var.json.a_variable.obj.v2 }}',
             on_success_callback=verify_templated_field,
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
         assert val['success']
 
     def test_template_with_json_variable_as_value(self):
@@ -533,7 +582,7 @@ class CoreTest(unittest.TestCase):
             some_templated_field='{{ var.value.a_variable }}',
             on_success_callback=verify_templated_field,
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
         assert val['success']
 
     def test_import_examples(self):
@@ -543,11 +592,12 @@ class CoreTest(unittest.TestCase):
         TI = models.TaskInstance
         ti = TI(
             task=self.runme_0, execution_date=DEFAULT_DATE)
-        job = jobs.LocalTaskJob(task_instance=ti, force=True)
+        job = jobs.LocalTaskJob(task_instance=ti, ignore_ti_state=True)
         job.run()
 
     def test_scheduler_job(self):
-        job = jobs.SchedulerJob(dag_id='example_bash_operator', test_mode=True)
+        job = jobs.SchedulerJob(dag_id='example_bash_operator',
+                                **self.default_scheduler_args)
         job.run()
 
     def test_raw_job(self):
@@ -555,7 +605,7 @@ class CoreTest(unittest.TestCase):
         ti = TI(
             task=self.runme_0, execution_date=DEFAULT_DATE)
         ti.dag = self.dag_bash
-        ti.run(force=True)
+        ti.run(ignore_ti_state=True)
 
     def test_doctests(self):
         modules = [utils, macros]
@@ -698,7 +748,7 @@ class CoreTest(unittest.TestCase):
 
     def test_bad_trigger_rule(self):
         with self.assertRaises(AirflowException):
-            operators.DummyOperator(
+            DummyOperator(
                 task_id='test_bad_trigger',
                 trigger_rule="non_existant",
                 dag=self.dag)
@@ -711,7 +761,7 @@ class CoreTest(unittest.TestCase):
 
         ti = TI(task=task, execution_date=DEFAULT_DATE)
         job = jobs.LocalTaskJob(
-            task_instance=ti, force=True, executor=SequentialExecutor())
+            task_instance=ti, ignore_ti_state=True, executor=SequentialExecutor())
 
         # Running task instance asynchronously
         p = multiprocessing.Process(target=job.run)
@@ -741,15 +791,115 @@ class CoreTest(unittest.TestCase):
         assert State.FAILED == ti.state
         session.close()
 
+    def test_task_fail_duration(self):
+        """If a task fails, the duration should be recorded in TaskFail"""
+
+        p = BashOperator(
+            task_id='pass_sleepy',
+            bash_command='sleep 3',
+            dag=self.dag)
+        f = BashOperator(
+            task_id='fail_sleepy',
+            bash_command='sleep 5',
+            execution_timeout=timedelta(seconds=3),
+            retry_delay=timedelta(seconds=0),
+            dag=self.dag)
+        session = settings.Session()
+        try:
+            p.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
+        except:
+            pass
+        try:
+            f.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
+        except:
+            pass
+        p_fails = session.query(models.TaskFail).filter_by(
+            task_id='pass_sleepy',
+            dag_id=self.dag.dag_id,
+            execution_date=DEFAULT_DATE).all()
+        f_fails = session.query(models.TaskFail).filter_by(
+            task_id='fail_sleepy',
+            dag_id=self.dag.dag_id,
+            execution_date=DEFAULT_DATE).all()
+        print(f_fails)
+        assert len(p_fails) == 0
+        assert len(f_fails) == 1
+        # C
+        assert sum([f.duration for f in f_fails]) >= 3
+
+    def test_dag_stats(self):
+        """Correctly sets/dirties/cleans rows of DagStat table"""
+
+        session = settings.Session()
+
+        session.query(models.DagRun).delete()
+        session.query(models.DagStat).delete()
+        session.commit()
+
+        run1 = self.dag_bash.create_dagrun(
+            run_id="run1",
+            execution_date=DEFAULT_DATE,
+            state=State.RUNNING)
+
+        models.DagStat.clean_dirty([self.dag_bash.dag_id], session=session)
+
+        qry = session.query(models.DagStat).all()
+
+        assert len(qry) == 1
+        assert qry[0].dag_id == self.dag_bash.dag_id and\
+                qry[0].state == State.RUNNING and\
+                qry[0].count == 1 and\
+                qry[0].dirty == False
+
+        run2 = self.dag_bash.create_dagrun(
+            run_id="run2",
+            execution_date=DEFAULT_DATE+timedelta(days=1),
+            state=State.RUNNING)
+
+        models.DagStat.clean_dirty([self.dag_bash.dag_id], session=session)
+
+        qry = session.query(models.DagStat).all()
+
+        assert len(qry) == 1
+        assert qry[0].dag_id == self.dag_bash.dag_id and\
+                qry[0].state == State.RUNNING and\
+                qry[0].count == 2 and\
+                qry[0].dirty == False
+
+        session.query(models.DagRun).first().state = State.SUCCESS
+        session.commit()
+
+        models.DagStat.clean_dirty([self.dag_bash.dag_id], session=session)
+
+        qry = session.query(models.DagStat).filter(models.DagStat.state == State.SUCCESS).all()
+        assert len(qry) == 1
+        assert qry[0].dag_id == self.dag_bash.dag_id and\
+                qry[0].state == State.SUCCESS and\
+                qry[0].count == 1 and\
+                qry[0].dirty == False
+
+        qry = session.query(models.DagStat).filter(models.DagStat.state == State.RUNNING).all()
+        assert len(qry) == 1
+        assert qry[0].dag_id == self.dag_bash.dag_id and\
+                qry[0].state == State.RUNNING and\
+                qry[0].count == 1 and\
+                qry[0].dirty == False
+
+        session.query(models.DagRun).delete()
+        session.query(models.DagStat).delete()
+        session.commit()
+        session.close()
+
 
 class CliTests(unittest.TestCase):
     def setUp(self):
-        configuration.test_mode()
+        configuration.load_test_config()
         app = application.create_app()
         app.config['TESTING'] = True
         self.parser = cli.CLIFactory.get_parser()
         self.dagbag = models.DagBag(
             dag_folder=DEV_NULL, include_examples=True)
+        # Persist DAGs
 
     def test_cli_list_dags(self):
         args = self.parser.parse_args(['list_dags', '--report'])
@@ -849,7 +999,17 @@ class CliTests(unittest.TestCase):
                 '-c', 'NOT JSON'])
         )
 
+    def test_pool(self):
+        # Checks if all subcommands are properly received
+        cli.pool(self.parser.parse_args([
+            'pool', '-s', 'foo', '1', '"my foo pool"']))
+        cli.pool(self.parser.parse_args([
+            'pool', '-g', 'foo']))
+        cli.pool(self.parser.parse_args([
+            'pool', '-x', 'foo']))
+
     def test_variables(self):
+        # Checks if all subcommands are properly received
         cli.variables(self.parser.parse_args([
             'variables', '-s', 'foo', '{"foo":"bar"}']))
         cli.variables(self.parser.parse_args([
@@ -858,11 +1018,58 @@ class CliTests(unittest.TestCase):
             'variables', '-g', 'baz', '-d', 'bar']))
         cli.variables(self.parser.parse_args([
             'variables']))
+        cli.variables(self.parser.parse_args([
+            'variables', '-x', 'bar']))
+        cli.variables(self.parser.parse_args([
+            'variables', '-i', DEV_NULL]))
+        cli.variables(self.parser.parse_args([
+            'variables', '-e', DEV_NULL]))
 
+        cli.variables(self.parser.parse_args([
+            'variables', '-s', 'bar', 'original']))
+        # First export
+        cli.variables(self.parser.parse_args([
+            'variables', '-e', 'variables1.json']))
+
+        first_exp = open('variables1.json', 'r')
+
+        cli.variables(self.parser.parse_args([
+            'variables', '-s', 'bar', 'updated']))
+        cli.variables(self.parser.parse_args([
+            'variables', '-s', 'foo', '{"foo":"oops"}']))
+        cli.variables(self.parser.parse_args([
+            'variables', '-x', 'foo']))
+        # First import
+        cli.variables(self.parser.parse_args([
+            'variables', '-i', 'variables1.json']))
+
+        assert models.Variable.get('bar') == 'original'
+        assert models.Variable.get('foo') == '{"foo": "bar"}'
+        # Second export
+        cli.variables(self.parser.parse_args([
+            'variables', '-e', 'variables2.json']))
+
+        second_exp = open('variables2.json', 'r')
+        assert second_exp.read() == first_exp.read()
+        second_exp.close()
+        first_exp.close()
+        # Second import
+        cli.variables(self.parser.parse_args([
+            'variables', '-i', 'variables2.json']))
+
+        assert models.Variable.get('bar') == 'original'
+        assert models.Variable.get('foo') == '{"foo": "bar"}'
+
+        session = settings.Session()
+        session.query(Variable).delete()
+        session.commit()
+        session.close()
+        os.remove('variables1.json')
+        os.remove('variables2.json')
 
 class WebUiTests(unittest.TestCase):
     def setUp(self):
-        configuration.test_mode()
+        configuration.load_test_config()
         configuration.conf.set("webserver", "authenticate", "False")
         app = application.create_app()
         app.config['TESTING'] = True
@@ -902,6 +1109,9 @@ class WebUiTests(unittest.TestCase):
             '/admin/airflow/duration?days=30&dag_id=example_bash_operator')
         assert "example_bash_operator" in response.data.decode('utf-8')
         response = self.app.get(
+            '/admin/airflow/tries?days=30&dag_id=example_bash_operator')
+        assert "example_bash_operator" in response.data.decode('utf-8')
+        response = self.app.get(
             '/admin/airflow/landing_times?'
             'days=30&dag_id=example_bash_operator')
         assert "example_bash_operator" in response.data.decode('utf-8')
@@ -933,6 +1143,9 @@ class WebUiTests(unittest.TestCase):
         assert "Attributes" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/dag_stats')
+        assert "example_bash_operator" in response.data.decode('utf-8')
+        response = self.app.get(
+            '/admin/airflow/task_stats')
         assert "example_bash_operator" in response.data.decode('utf-8')
         url = (
             "/admin/airflow/success?task_id=run_this_last&"
@@ -973,8 +1186,9 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(url + "&confirmed=true")
         url = (
             "/admin/airflow/run?task_id=runme_0&"
-            "dag_id=example_bash_operator&force=true&deps=true&"
-            "execution_date={}&origin=/admin".format(DEFAULT_DATE_DS))
+            "dag_id=example_bash_operator&ignore_all_deps=false&ignore_ti_state=true&"
+            "ignore_task_deps=true&execution_date={}&"
+            "origin=/admin".format(DEFAULT_DATE_DS))
         response = self.app.get(url)
         response = self.app.get(
             "/admin/airflow/refresh?dag_id=example_bash_operator")
@@ -1013,7 +1227,7 @@ class WebUiTests(unittest.TestCase):
         TI = models.TaskInstance
         ti = TI(
             task=self.runme_0, execution_date=DEFAULT_DATE)
-        job = jobs.LocalTaskJob(task_instance=ti, force=True)
+        job = jobs.LocalTaskJob(task_instance=ti, ignore_ti_state=True)
         job.run()
 
         response = self.app.get(url)
@@ -1082,7 +1296,7 @@ class WebPasswordAuthTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
 
     def tearDown(self):
-        configuration.test_mode()
+        configuration.load_test_config()
         session = Session()
         session.query(models.User).delete()
         session.commit()
@@ -1166,12 +1380,45 @@ class WebLdapAuthTest(unittest.TestCase):
         assert 'Connections' in response.data.decode('utf-8')
 
     def tearDown(self):
-        configuration.test_mode()
+        configuration.load_test_config()
         session = Session()
         session.query(models.User).delete()
         session.commit()
         session.close()
         configuration.conf.set("webserver", "authenticate", "False")
+
+
+class LdapGroupTest(unittest.TestCase):
+    def setUp(self):
+        configuration.conf.set("webserver", "authenticate", "True")
+        configuration.conf.set("webserver", "auth_backend", "airflow.contrib.auth.backends.ldap_auth")
+        try:
+            configuration.conf.add_section("ldap")
+        except:
+            pass
+        configuration.conf.set("ldap", "uri", "ldap://localhost:3890")
+        configuration.conf.set("ldap", "user_filter", "objectClass=*")
+        configuration.conf.set("ldap", "user_name_attr", "uid")
+        configuration.conf.set("ldap", "bind_user", "cn=Manager,dc=example,dc=com")
+        configuration.conf.set("ldap", "bind_password", "insecure")
+        configuration.conf.set("ldap", "basedn", "dc=example,dc=com")
+        configuration.conf.set("ldap", "cacert", "")
+
+    def test_group_belonging(self):
+        from airflow.contrib.auth.backends.ldap_auth import LdapUser
+        users = {"user1": ["group1", "group3"],
+                 "user2": ["group2"]
+                 }
+        for user in users:
+            mu = models.User(username=user,
+                             is_superuser=False)
+            auth = LdapUser(mu)
+            assert set(auth.ldap_groups) == set(users[user])
+
+    def tearDown(self):
+        configuration.load_test_config()
+        configuration.conf.set("webserver", "authenticate", "False")
+
 
 class FakeSession(object):
     def __init__(self):
@@ -1188,25 +1435,25 @@ class FakeSession(object):
 
 class HttpOpSensorTest(unittest.TestCase):
     def setUp(self):
-        configuration.test_mode()
+        configuration.load_test_config()
         args = {'owner': 'airflow', 'start_date': DEFAULT_DATE_ISO}
         dag = DAG(TEST_DAG_ID, default_args=args)
         self.dag = dag
 
     @mock.patch('requests.Session', FakeSession)
     def test_get(self):
-        t = operators.SimpleHttpOperator(
+        t = SimpleHttpOperator(
             task_id='get_op',
             method='GET',
             endpoint='/search',
             data={"client": "ubuntu", "q": "airflow"},
             headers={},
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     @mock.patch('requests.Session', FakeSession)
     def test_get_response_check(self):
-        t = operators.SimpleHttpOperator(
+        t = SimpleHttpOperator(
             task_id='get_op',
             method='GET',
             endpoint='/search',
@@ -1214,11 +1461,11 @@ class HttpOpSensorTest(unittest.TestCase):
             response_check=lambda response: ("airbnb/airflow" in response.text),
             headers={},
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     @mock.patch('requests.Session', FakeSession)
     def test_sensor(self):
-        sensor = operators.sensors.HttpSensor(
+        sensor = sensors.HttpSensor(
             task_id='http_sensor_check',
             conn_id='http_default',
             endpoint='/search',
@@ -1228,7 +1475,7 @@ class HttpOpSensorTest(unittest.TestCase):
             poke_interval=5,
             timeout=15,
             dag=self.dag)
-        sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
 class FakeWebHDFSHook(object):
     def __init__(self, conn_id):
@@ -1242,7 +1489,7 @@ class FakeWebHDFSHook(object):
 
 class ConnectionTest(unittest.TestCase):
     def setUp(self):
-        configuration.test_mode()
+        configuration.load_test_config()
         utils.db.initdb()
         os.environ['AIRFLOW_CONN_TEST_URI'] = (
             'postgres://username:password@ec2.compute.com:5432/the_database')
@@ -1256,7 +1503,7 @@ class ConnectionTest(unittest.TestCase):
                 del os.environ[ev]
 
     def test_using_env_var(self):
-        c = hooks.SqliteHook.get_connection(conn_id='test_uri')
+        c = SqliteHook.get_connection(conn_id='test_uri')
         assert c.host == 'ec2.compute.com'
         assert c.schema == 'the_database'
         assert c.login == 'username'
@@ -1264,7 +1511,7 @@ class ConnectionTest(unittest.TestCase):
         assert c.port == 5432
 
     def test_using_unix_socket_env_var(self):
-        c = hooks.SqliteHook.get_connection(conn_id='test_uri_no_creds')
+        c = SqliteHook.get_connection(conn_id='test_uri_no_creds')
         assert c.host == 'ec2.compute.com'
         assert c.schema == 'the_database'
         assert c.login is None
@@ -1282,12 +1529,12 @@ class ConnectionTest(unittest.TestCase):
         assert c.port is None
 
     def test_env_var_priority(self):
-        c = hooks.SqliteHook.get_connection(conn_id='airflow_db')
+        c = SqliteHook.get_connection(conn_id='airflow_db')
         assert c.host != 'ec2.compute.com'
 
         os.environ['AIRFLOW_CONN_AIRFLOW_DB'] = \
             'postgres://username:password@ec2.compute.com:5432/the_database'
-        c = hooks.SqliteHook.get_connection(conn_id='airflow_db')
+        c = SqliteHook.get_connection(conn_id='airflow_db')
         assert c.host == 'ec2.compute.com'
         assert c.schema == 'the_database'
         assert c.login == 'username'
@@ -1298,7 +1545,7 @@ class ConnectionTest(unittest.TestCase):
 
 class WebHDFSHookTest(unittest.TestCase):
     def setUp(self):
-        configuration.test_mode()
+        configuration.load_test_config()
 
     def test_simple_init(self):
         from airflow.hooks.webhdfs_hook import WebHDFSHook
@@ -1311,15 +1558,21 @@ class WebHDFSHookTest(unittest.TestCase):
         assert c.proxy_user == 'someone'
 
 
-@unittest.skipUnless("S3Hook" in dir(hooks),
-                     "Skipping test because S3Hook is not installed")
+try:
+    from airflow.hooks.S3_hook import S3Hook
+except ImportError:
+    S3Hook = None
+
+
+@unittest.skipIf(S3Hook is None,
+                 "Skipping test because S3Hook is not installed")
 class S3HookTest(unittest.TestCase):
     def setUp(self):
-        configuration.test_mode()
+        configuration.load_test_config()
         self.s3_test_url = "s3://test/this/is/not/a-real-key.txt"
 
     def test_parse_s3_url(self):
-        parsed = hooks.S3Hook.parse_s3_url(self.s3_test_url)
+        parsed = S3Hook.parse_s3_url(self.s3_test_url)
         self.assertEqual(parsed,
                          ("test", "this/is/not/a-real-key.txt"),
                          "Incorrect parsing of the s3 url")
@@ -1340,7 +1593,7 @@ conn.sendall(b'hello')
 
 class SSHHookTest(unittest.TestCase):
     def setUp(self):
-        configuration.test_mode()
+        configuration.load_test_config()
         from airflow.contrib.hooks.ssh_hook import SSHHook
         self.hook = SSHHook()
         self.hook.no_host_key_check = True
@@ -1394,7 +1647,7 @@ class EmailTest(unittest.TestCase):
     def test_custom_backend(self, mock_send_email):
         configuration.set('email', 'EMAIL_BACKEND', 'tests.core.send_email_test')
         utils.email.send_email('to', 'subject', 'content')
-        send_email_test.assert_called_with('to', 'subject', 'content', files=None, dryrun=False)
+        send_email_test.assert_called_with('to', 'subject', 'content', files=None, dryrun=False, cc=None, bcc=None)
         assert not mock_send_email.called
 
 
@@ -1418,6 +1671,24 @@ class EmailSmtpTest(unittest.TestCase):
         assert len(msg.get_payload()) == 2
         mimeapp = MIMEApplication('attachment')
         assert msg.get_payload()[-1].get_payload() == mimeapp.get_payload()
+
+    @mock.patch('airflow.utils.email.send_MIME_email')
+    def test_send_bcc_smtp(self, mock_send_mime):
+        attachment = tempfile.NamedTemporaryFile()
+        attachment.write(b'attachment')
+        attachment.seek(0)
+        utils.email.send_email_smtp('to', 'subject', 'content', files=[attachment.name], cc='cc', bcc='bcc')
+        assert mock_send_mime.called
+        call_args = mock_send_mime.call_args[0]
+        assert call_args[0] == configuration.get('smtp', 'SMTP_MAIL_FROM')
+        assert call_args[1] == ['to', 'cc', 'bcc']
+        msg = call_args[2]
+        assert msg['Subject'] == 'subject'
+        assert msg['From'] == configuration.get('smtp', 'SMTP_MAIL_FROM')
+        assert len(msg.get_payload()) == 2
+        mimeapp = MIMEApplication('attachment')
+        assert msg.get_payload()[-1].get_payload() == mimeapp.get_payload()
+
 
     @mock.patch('smtplib.SMTP_SSL')
     @mock.patch('smtplib.SMTP')

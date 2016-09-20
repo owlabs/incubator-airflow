@@ -20,6 +20,7 @@ from airflow.operators.sensors import BaseSensorOperator
 from airflow.contrib.hooks.fs_hook import FSHook
 from airflow.utils.decorators import apply_defaults
 
+
 class FileSensor(BaseSensorOperator):
     """
     Waits for a file or folder to land in a filesystem
@@ -32,6 +33,7 @@ class FileSensor(BaseSensorOperator):
     :type fs_conn_id: string
     """
     template_fields = ('filepath',)
+    ui_color = '#91818a'
 
     @apply_defaults
     def __init__(

@@ -19,7 +19,8 @@ import flask_login
 # pylint: disable=unused-import
 from flask_login import (current_user,
                          logout_user,
-                         login_required)
+                         login_required,
+                         login_user)
 # pylint: enable=unused-import
 
 from flask import url_for, redirect, request
@@ -30,6 +31,7 @@ from airflow import models, configuration, settings
 from airflow.configuration import AirflowConfigException
 
 _log = logging.getLogger(__name__)
+
 
 def get_config_param(param):
     return str(configuration.get('github_enterprise', param))
@@ -99,7 +101,7 @@ class GHEAuthBackend(object):
             consumer_key=get_config_param('client_id'),
             consumer_secret=get_config_param('client_secret'),
             # need read:org to get team member list
-            request_token_params={'scope': 'user,read:org'},
+            request_token_params={'scope': 'user:email,read:org'},
             base_url=self.ghe_host,
             request_token_url=None,
             access_token_method='POST',
@@ -219,6 +221,7 @@ class GHEAuthBackend(object):
         return redirect(next_url)
 
 login_manager = GHEAuthBackend()
+
 
 def login(self, request):
     return login_manager.login(request)

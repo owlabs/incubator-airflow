@@ -485,7 +485,7 @@ the main UI. For example:
 
   #dags/subdag.py
   from airflow.models import DAG
-  from airflow.operators import DummyOperator
+  from airflow.operators.dummy_operator import DummyOperator
 
 
   # Dag is returned by a factory method
@@ -510,7 +510,7 @@ This SubDAG can then be referenced in your main DAG file:
   # main_dag.py
   from datetime import datetime, timedelta
   from airflow.models import DAG
-  from airflow.operators import SubDagOperator
+  from airflow.operators.subdag_operator import SubDagOperator
   from dags.subdag import sub_dag
 
 
@@ -664,6 +664,7 @@ configuration files, it allows you to expose the configuration that led
 to the related tasks in Airflow.
 
 .. code:: python
+
     """
     ### My great DAG
     """

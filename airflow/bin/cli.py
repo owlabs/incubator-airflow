@@ -31,22 +31,50 @@ import daemon
 from daemon.pidfile import TimeoutPIDLockFile
 import signal
 import sys
+import threading
+import traceback
+import time
+import psutil
 
 import airflow
 from airflow import jobs, settings
 from airflow import configuration as conf
+from airflow.exceptions import AirflowException
 from airflow.executors import DEFAULT_EXECUTOR
-from airflow.models import DagModel, DagBag, TaskInstance, DagPickle, DagRun, Variable
+from airflow.models import (DagModel, DagBag, TaskInstance,
+                            DagPickle, DagRun, Variable, DagStat,
+                            Pool)
+from airflow.ti_deps.dep_context import (DepContext, SCHEDULER_DEPS)
 from airflow.utils import db as db_utils
 from airflow.utils import logging as logging_utils
 from airflow.utils.state import State
-from airflow.exceptions import AirflowException
+from airflow.www.app import cached_app
+
+from sqlalchemy import func
 
 DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
 
 
-def sigint_handler(signal, frame):
+def sigint_handler(sig, frame):
     sys.exit(0)
+
+
+def sigquit_handler(sig, frame):
+    """Helps debug deadlocks by printing stacktraces when this gets a SIGQUIT
+    e.g. kill -s QUIT <PID> or CTRL+\
+    """
+    print("Dumping stack traces for all threads in PID {}".format(os.getpid()))
+    id_to_name = dict([(th.ident, th.name) for th in threading.enumerate()])
+    code = []
+    for thread_id, stack in sys._current_frames().items():
+        code.append("\n# Thread: {}({})"
+                    .format(id_to_name.get(thread_id, ""), thread_id))
+        for filename, line_number, name, line in traceback.extract_stack(stack):
+            code.append('File: "{}", line {}, in {}'
+                        .format(filename, line_number, name))
+            if line:
+                code.append("  {}".format(line.strip()))
+    print("\n".join(code))
 
 
 def setup_logging(filename):
@@ -87,7 +115,8 @@ def get_dag(args):
     dagbag = DagBag(process_subdir(args.subdir))
     if args.dag_id not in dagbag.dags:
         raise AirflowException(
-            'dag_id could not be found: {}'.format(args.dag_id))
+            'dag_id could not be found: {}. Either the dag did not exist or it failed to '
+            'parse.'.format(args.dag_id))
     return dagbag.dags[args.dag_id]
 
 
@@ -126,8 +155,8 @@ def backfill(args, dag=None):
             local=args.local,
             donot_pickle=(args.donot_pickle or
                           conf.getboolean('core', 'donot_pickle')),
-            ignore_dependencies=args.ignore_dependencies,
             ignore_first_depends_on_past=args.ignore_first_depends_on_past,
+            ignore_task_deps=args.ignore_dependencies,
             pool=args.pool)
 
 
@@ -160,7 +189,41 @@ def trigger_dag(args):
     logging.info("Created {}".format(trigger))
 
 
+def pool(args):
+    session = settings.Session()
+    if args.get or (args.set and args.set[0]) or args.delete:
+        name = args.get or args.delete or args.set[0]
+    pool = (
+        session.query(Pool)
+        .filter(Pool.pool == name)
+        .first())
+    if pool and args.get:
+        print("{} ".format(pool))
+        return
+    elif not pool and (args.get or args.delete):
+        print("No pool named {} found".format(name))
+    elif not pool and args.set:
+        pool = Pool(
+            pool=name,
+            slots=args.set[1],
+            description=args.set[2])
+        session.add(pool)
+        session.commit()
+        print("{} ".format(pool))
+    elif pool and args.set:
+        pool.slots = args.set[1]
+        pool.description = args.set[2]
+        session.commit()
+        print("{} ".format(pool))
+        return
+    elif pool and args.delete:
+        session.query(Pool).filter_by(pool=args.delete).delete()
+        session.commit()
+        print("Pool {} deleted".format(name))
+
+
 def variables(args):
+
     if args.get:
         try:
             var = Variable.get(args.get,
@@ -169,15 +232,71 @@ def variables(args):
             print(var)
         except ValueError as e:
             print(e)
+    if args.delete:
+        session = settings.Session()
+        session.query(Variable).filter_by(key=args.delete).delete()
+        session.commit()
+        session.close()
     if args.set:
         Variable.set(args.set[0], args.set[1])
-    if not args.set and not args.get:
+    # Work around 'import' as a reserved keyword
+    imp = getattr(args, 'import')
+    if imp:
+        if os.path.exists(imp):
+            import_helper(imp)
+        else:
+            print("Missing variables file.")
+    if args.export:
+        export_helper(args.export)
+    if not (args.set or args.get or imp or args.export or args.delete):
         # list all variables
         session = settings.Session()
         vars = session.query(Variable)
         msg = "\n".join(var.key for var in vars)
         print(msg)
 
+
+def import_helper(filepath):
+    with open(filepath, 'r') as varfile:
+        var = varfile.read()
+
+    try:
+        d = json.loads(var)
+    except Exception:
+        print("Invalid variables file.")
+    else:
+        try:
+            n = 0
+            for k, v in d.items():
+                if isinstance(v, dict):
+                    Variable.set(k, v, serialize_json=True)
+                else:
+                    Variable.set(k, v)
+                n += 1
+        except Exception:
+            pass
+        finally:
+            print("{} of {} variables successfully updated.".format(n, len(d)))
+
+
+def export_helper(filepath):
+    session = settings.Session()
+    qry = session.query(Variable).all()
+    session.close()
+
+    var_dict = {}
+    d = json.JSONDecoder()
+    for var in qry:
+        val = None
+        try:
+            val = d.decode(var.val)
+        except Exception:
+            val = var.val
+        var_dict[var.key] = val
+
+    with open(filepath, 'w') as varfile:
+        varfile.write(json.dumps(var_dict, sort_keys=True, indent=4))
+    print("{} variables successfully exported to {}".format(len(var_dict), filepath))
 
 def pause(args, dag=None):
     set_is_paused(True, args, dag)
@@ -238,18 +357,20 @@ def run(args, dag=None):
         run_job = jobs.LocalTaskJob(
             task_instance=ti,
             mark_success=args.mark_success,
-            force=args.force,
             pickle_id=args.pickle,
-            ignore_dependencies=args.ignore_dependencies,
+            ignore_all_deps=args.ignore_all_dependencies,
             ignore_depends_on_past=args.ignore_depends_on_past,
+            ignore_task_deps=args.ignore_dependencies,
+            ignore_ti_state=args.force,
             pool=args.pool)
         run_job.run()
     elif args.raw:
         ti.run(
             mark_success=args.mark_success,
-            force=args.force,
-            ignore_dependencies=args.ignore_dependencies,
+            ignore_all_deps=args.ignore_all_dependencies,
             ignore_depends_on_past=args.ignore_depends_on_past,
+            ignore_task_deps=args.ignore_dependencies,
+            ignore_ti_state=args.force,
             job_id=args.job_id,
             pool=args.pool,
         )
@@ -278,9 +399,10 @@ def run(args, dag=None):
             ti,
             mark_success=args.mark_success,
             pickle_id=pickle_id,
-            ignore_dependencies=args.ignore_dependencies,
+            ignore_all_deps=args.ignore_all_dependencies,
             ignore_depends_on_past=args.ignore_depends_on_past,
-            force=args.force,
+            ignore_task_deps=args.ignore_dependencies,
+            ignore_ti_state=args.force,
             pool=args.pool)
         executor.heartbeat()
         executor.end()
@@ -324,6 +446,31 @@ def run(args, dag=None):
         elif remote_base and remote_base != 'None':
             logging.error(
                 'Unsupported remote log location: {}'.format(remote_base))
+
+
+def task_failed_deps(args):
+    """
+    Returns the unmet dependencies for a task instance from the perspective of the
+    scheduler (i.e. why a task instance doesn't get scheduled and then queued by the
+    scheduler, and then run by an executor).
+
+    >>> airflow task_failed_deps tutorial sleep 2015-01-01
+    Task instance dependencies not met:
+    Dagrun Running: Task instance's dagrun did not exist: Unknown reason
+    Trigger Rule: Task's trigger rule 'all_success' requires all upstream tasks to have succeeded, but found 1 non-success(es).
+    """
+    dag = get_dag(args)
+    task = dag.get_task(task_id=args.task_id)
+    ti = TaskInstance(task, args.execution_date)
+
+    dep_context = DepContext(deps=SCHEDULER_DEPS)
+    failed_deps = list(ti.get_failed_dep_statuses(dep_context=dep_context))
+    if failed_deps:
+        print("Task instance dependencies not met:")
+        for dep in failed_deps:
+            print("{}: {}".format(dep.dep_name, dep.reason))
+    else:
+        print("Task instance dependencies are all met.")
 
 
 def task_state(args):
@@ -387,7 +534,7 @@ def test(args, dag=None):
     if args.dry_run:
         ti.dry_run()
     else:
-        ti.run(force=True, ignore_dependencies=True, test_mode=True)
+        ti.run(ignore_task_deps=True, ignore_ti_state=True, test_mode=True)
 
 
 def render(args):
@@ -425,27 +572,145 @@ def clear(args):
         include_subdags=not args.exclude_subdags)
 
 
+def restart_workers(gunicorn_master_proc, num_workers_expected):
+    """
+    Runs forever, monitoring the child processes of @gunicorn_master_proc and
+    restarting workers occasionally.
+
+    Each iteration of the loop traverses one edge of this state transition
+    diagram, where each state (node) represents
+    [ num_ready_workers_running / num_workers_running ]. We expect most time to
+    be spent in [n / n]. `bs` is the setting webserver.worker_refresh_batch_size.
+
+    The horizontal transition at ? happens after the new worker parses all the
+    dags (so it could take a while!)
+
+       V ────────────────────────────────────────────────────────────────────────┐
+    [n / n] ──TTIN──> [ [n, n+bs) / n + bs ]  ────?───> [n + bs / n + bs] ──TTOU─┘
+       ^                          ^───────────────┘
+       │
+       │      ┌────────────────v
+       └──────┴────── [ [0, n) / n ] <─── start
+
+    We change the number of workers by sending TTIN and TTOU to the gunicorn
+    master process, which increases and decreases the number of child workers
+    respectively. Gunicorn guarantees that on TTOU workers are terminated
+    gracefully and that the oldest worker is terminated.
+    """
+
+    def wait_until_true(fn):
+        """
+        Sleeps until fn is true
+        """
+        while not fn():
+            time.sleep(0.1)
+
+    def get_num_workers_running(gunicorn_master_proc):
+        workers = psutil.Process(gunicorn_master_proc.pid).children()
+        return len(workers)
+
+    def get_num_ready_workers_running(gunicorn_master_proc):
+        workers = psutil.Process(gunicorn_master_proc.pid).children()
+        ready_workers = [
+            proc for proc in workers
+            if settings.GUNICORN_WORKER_READY_PREFIX in proc.cmdline()[0]
+        ]
+        return len(ready_workers)
+
+    def start_refresh(gunicorn_master_proc):
+        batch_size = conf.getint('webserver', 'worker_refresh_batch_size')
+        logging.debug('%s doing a refresh of %s workers',
+            state, batch_size)
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        excess = 0
+        for _ in range(batch_size):
+            gunicorn_master_proc.send_signal(signal.SIGTTIN)
+            excess += 1
+            wait_until_true(lambda: num_workers_expected + excess ==
+                get_num_workers_running(gunicorn_master_proc))
+
+
+    wait_until_true(lambda: num_workers_expected ==
+        get_num_workers_running(gunicorn_master_proc))
+
+    while True:
+        num_workers_running = get_num_workers_running(gunicorn_master_proc)
+        num_ready_workers_running = get_num_ready_workers_running(gunicorn_master_proc)
+
+        state = '[{0} / {1}]'.format(num_ready_workers_running, num_workers_running)
+
+        # Whenever some workers are not ready, wait until all workers are ready
+        if num_ready_workers_running < num_workers_running:
+            logging.debug('%s some workers are starting up, waiting...', state)
+            sys.stdout.flush()
+            time.sleep(1)
+
+        # Kill a worker gracefully by asking gunicorn to reduce number of workers
+        elif num_workers_running > num_workers_expected:
+            excess = num_workers_running - num_workers_expected
+            logging.debug('%s killing %s workers', state, excess)
+
+            for _ in range(excess):
+                gunicorn_master_proc.send_signal(signal.SIGTTOU)
+                excess -= 1
+                wait_until_true(lambda: num_workers_expected + excess ==
+                    get_num_workers_running(gunicorn_master_proc))
+
+        # Start a new worker by asking gunicorn to increase number of workers
+        elif num_workers_running == num_workers_expected:
+            refresh_interval = conf.getint('webserver', 'worker_refresh_interval')
+            logging.debug(
+                '%s sleeping for %ss starting doing a refresh...',
+                state, refresh_interval
+            )
+            time.sleep(refresh_interval)
+            start_refresh(gunicorn_master_proc)
+
+        else:
+            # num_ready_workers_running == num_workers_running < num_workers_expected
+            logging.error((
+                "%s some workers seem to have died and gunicorn"
+                "did not restart them as expected"
+            ), state)
+            time.sleep(10)
+            if len(
+                psutil.Process(gunicorn_master_proc.pid).children()
+            ) < num_workers_expected:
+                start_refresh(gunicorn_master_proc)
+
+
 def webserver(args):
     print(settings.HEADER)
 
-    from airflow.www.app import cached_app
     app = cached_app(conf)
     access_logfile = args.access_logfile or conf.get('webserver', 'access_logfile')
     error_logfile = args.error_logfile or conf.get('webserver', 'error_logfile')
-    workers = args.workers or conf.get('webserver', 'workers')
+    num_workers = args.workers or conf.get('webserver', 'workers')
     worker_timeout = (args.worker_timeout or
                       conf.get('webserver', 'webserver_worker_timeout'))
+    ssl_cert = args.ssl_cert or conf.get('webserver', 'web_server_ssl_cert')
+    ssl_key = args.ssl_key or conf.get('webserver', 'web_server_ssl_key')
+    if ssl_cert is None and ssl_key is not None:
+        raise AirflowException(
+            'An SSL certificate must also be provided for use with ' + ssl_key)
+    if ssl_cert is not None and ssl_key is None:
+        raise AirflowException(
+            'An SSL key must also be provided for use with ' + ssl_cert)
+
     if args.debug:
         print(
             "Starting the web server on port {0} and host {1}.".format(
                 args.port, args.hostname))
-        app.run(debug=True, port=args.port, host=args.hostname)
+        app.run(debug=True, port=args.port, host=args.hostname,
+                ssl_context=(ssl_cert, ssl_key))
     else:
         pid, stdout, stderr, log_file = setup_locations("webserver", pid=args.pid)
         print(
             textwrap.dedent('''\
                 Running the Gunicorn Server with:
-                Workers: {workers} {args.workerclass}
+                Workers: {num_workers} {args.workerclass}
                 Host: {args.hostname}:{args.port}
                 Timeout: {worker_timeout}
                 Logfiles: {access_logfile} {error_logfile}
@@ -454,12 +719,13 @@ def webserver(args):
 
         run_args = [
             'gunicorn',
-            '-w ' + str(args.workers),
-            '-k ' + str(args.workerclass),
-            '-t ' + str(args.worker_timeout),
-            '-b ' + args.hostname + ':' + str(args.port),
-            '-n ' + 'airflow-webserver',
-            '-p ' + str(pid),
+            '-w', str(num_workers),
+            '-k', str(args.workerclass),
+            '-t', str(worker_timeout),
+            '-b', args.hostname + ':' + str(args.port),
+            '-n', 'airflow-webserver',
+            '-p', str(pid),
+            '-c', 'airflow.www.gunicorn_config'
         ]
 
         if args.access_logfile:
@@ -470,12 +736,26 @@ def webserver(args):
 
         if args.daemon:
             run_args += ["-D"]
+        if ssl_cert:
+            run_args += ['--certfile', ssl_cert, '--keyfile', ssl_key]
 
-        module = "airflow.www.app:cached_app()".encode()
-        run_args += [module]
-        os.execvp(
-            'gunicorn', run_args
-        )
+        run_args += ["airflow.www.app:cached_app()"]
+
+        gunicorn_master_proc = subprocess.Popen(run_args)
+
+        def kill_proc(dummy_signum, dummy_frame):
+            gunicorn_master_proc.terminate()
+            gunicorn_master_proc.wait()
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, kill_proc)
+        signal.signal(signal.SIGTERM, kill_proc)
+
+        # These run forever until SIG{INT, TERM, KILL, ...} signal is sent
+        if conf.getint('webserver', 'worker_refresh_interval') > 0:
+            restart_workers(gunicorn_master_proc, num_workers)
+        else:
+            while True: time.sleep(1)
 
 
 def scheduler(args):
@@ -483,6 +763,7 @@ def scheduler(args):
     job = jobs.SchedulerJob(
         dag_id=args.dag_id,
         subdir=process_subdir(args.subdir),
+        run_duration=args.run_duration,
         num_runs=args.num_runs,
         do_pickle=args.do_pickle)
 
@@ -506,6 +787,7 @@ def scheduler(args):
     else:
         signal.signal(signal.SIGINT, sigint_handler)
         signal.signal(signal.SIGTERM, sigint_handler)
+        signal.signal(signal.SIGQUIT, sigquit_handler)
         job.run()
 
 
@@ -595,6 +877,17 @@ def upgradedb(args):  # noqa
     print("DB: " + repr(settings.engine.url))
     db_utils.upgradedb()
 
+    # Populate DagStats table
+    session = settings.Session()
+    ds_rows = session.query(DagStat).count()
+    if not ds_rows:
+        qry = (
+            session.query(DagRun.dag_id, DagRun.state, func.count('*'))
+            .group_by(DagRun.dag_id, DagRun.state)
+        )
+        for dag_id, state, count in qry:
+            session.add(DagStat(dag_id=dag_id, state=state, count=count))
+        session.commit()
 
 def version(args):  # noqa
     print(settings.HEADER + "  v" + airflow.__version__)
@@ -608,6 +901,10 @@ def flower(args):
     if args.broker_api:
         api = '--broker_api=' + args.broker_api
 
+    flower_conf = ''
+    if args.flower_conf:
+        flower_conf = '--conf=' + args.flower_conf
+
     if args.daemon:
         pid, stdout, stderr, log_file = setup_locations("flower", args.pid, args.stdout, args.stderr, args.log_file)
         stdout = open(stdout, 'w+')
@@ -620,7 +917,7 @@ def flower(args):
         )
 
         with ctx:
-            os.execvp("flower", ['flower', '-b', broka, address, port, api])
+            os.execvp("flower", ['flower', '-b', broka, address, port, api, flower_conf])
 
         stdout.close()
         stderr.close()
@@ -628,7 +925,7 @@ def flower(args):
         signal.signal(signal.SIGINT, sigint_handler)
         signal.signal(signal.SIGTERM, sigint_handler)
 
-        os.execvp("flower", ['flower', '-b', broka, address, port, api])
+        os.execvp("flower", ['flower', '-b', broka, address, port, api, flower_conf])
 
 
 def kerberos(args):  # noqa
@@ -753,6 +1050,20 @@ class CLIFactory(object):
         'conf': Arg(
             ('-c', '--conf'),
             "JSON string that gets pickled into the DagRun's conf attribute"),
+        # pool
+        'pool_set': Arg(
+            ("-s", "--set"),
+            nargs=3,
+            metavar=('NAME', 'SLOT_COUNT', 'POOL_DESCRIPTION'),
+            help="Set pool slot count and description, respectively"),
+        'pool_get': Arg(
+            ("-g", "--get"),
+            metavar='NAME',
+            help="Get pool info"),
+        'pool_delete': Arg(
+            ("-x", "--delete"),
+            metavar="NAME",
+            help="Delete a pool"),
         # variables
         'set': Arg(
             ("-s", "--set"),
@@ -772,6 +1083,18 @@ class CLIFactory(object):
             ("-j", "--json"),
             help="Deserialize JSON variable",
             action="store_true"),
+        'var_import': Arg(
+            ("-i", "--import"),
+            metavar="FILEPATH",
+            help="Import variables from JSON file"),
+        'var_export': Arg(
+            ("-e", "--export"),
+            metavar="FILEPATH",
+            help="Export variables to JSON file"),
+        'var_delete': Arg(
+            ("-x", "--delete"),
+            metavar="KEY",
+            help="Delete a variable"),
         # kerberos
         'principal': Arg(
             ("principal",), "kerberos principal",
@@ -780,13 +1103,32 @@ class CLIFactory(object):
             ("-kt", "--keytab"), "keytab",
             nargs='?', default=conf.get('kerberos', 'keytab')),
         # run
+        # TODO(aoen): "force" is a poor choice of name here since it implies it overrides
+        # all dependencies (not just past success), e.g. the ignore_depends_on_past
+        # dependency. This flag should be deprecated and renamed to 'ignore_ti_state' and
+        # the "ignore_all_dependencies" command should be called the"force" command
+        # instead.
         'force': Arg(
             ("-f", "--force"),
-            "Force a run regardless of previous success", "store_true"),
+            "Ignore previous task instance state, rerun regardless if task already "
+            "succeeded/failed",
+            "store_true"),
         'raw': Arg(("-r", "--raw"), argparse.SUPPRESS, "store_true"),
+        'ignore_all_dependencies': Arg(
+            ("-A", "--ignore_all_dependencies"),
+            "Ignores all non-critical dependencies, including ignore_ti_state and "
+            "ignore_task_deps"
+            "store_true"),
+        # TODO(aoen): ignore_dependencies is a poor choice of name here because it is too
+        # vague (e.g. a task being in the appropriate state to be run is also a dependency
+        # but is not ignored by this flag), the name 'ignore_task_dependencies' is
+        # slightly better (as it ignores all dependencies that are specific to the task),
+        # so deprecate the old command name and use this instead.
         'ignore_dependencies': Arg(
             ("-i", "--ignore_dependencies"),
-            "Ignore upstream and depends_on_past dependencies", "store_true"),
+            "Ignore task-specific dependencies, e.g. upstream, depends_on_past, and "
+            "retry delay dependencies",
+            "store_true"),
         'ignore_depends_on_past': Arg(
             ("-I", "--ignore_depends_on_past"),
             "Ignore depends_on_past dependencies (but respect "
@@ -806,6 +1148,14 @@ class CLIFactory(object):
             default=conf.get('webserver', 'WEB_SERVER_PORT'),
             type=int,
             help="The port on which to run the server"),
+        'ssl_cert': Arg(
+            ("--ssl_cert", ),
+            default=conf.get('webserver', 'WEB_SERVER_SSL_CERT'),
+            help="Path to the SSL certificate for the webserver"),
+        'ssl_key': Arg(
+            ("--ssl_key", ),
+            default=conf.get('webserver', 'WEB_SERVER_SSL_KEY'),
+            help="Path to the key to use with the SSL certificate"),
         'workers': Arg(
             ("-w", "--workers"),
             default=conf.get('webserver', 'WORKERS'),
@@ -847,6 +1197,10 @@ class CLIFactory(object):
             default=False),
         # scheduler
         'dag_id_opt': Arg(("-d", "--dag_id"), help="The id of the dag to run"),
+        'run_duration': Arg(
+            ("-r", "--run-duration"),
+            default=None, type=int,
+            help="Set number of seconds to execute before exiting"),
         'num_runs': Arg(
             ("-n", "--num_runs"),
             default=None, type=int,
@@ -880,6 +1234,9 @@ class CLIFactory(object):
             default=conf.get('celery', 'FLOWER_PORT'),
             type=int,
             help="The port on which to run the server"),
+        'flower_conf': Arg(
+            ("-fc", "--flower_conf"),
+            help="Configuration file for flower"),
         'task_params': Arg(
             ("-tp", "--task_params"),
             help="Sends a JSON params dict to the task"),
@@ -917,9 +1274,13 @@ class CLIFactory(object):
             'help': "Trigger a DAG run",
             'args': ('dag_id', 'subdir', 'run_id', 'conf'),
         }, {
+            'func': pool,
+            'help': "CRUD operations on pools",
+            "args": ('pool_set', 'pool_get', 'pool_delete'),
+        }, {
             'func': variables,
-            'help': "List all variables",
-            "args": ('set', 'get', 'json', 'default'),
+            'help': "CRUD operations on variables",
+            "args": ('set', 'get', 'json', 'default', 'var_import', 'var_export', 'var_delete'),
         }, {
             'func': kerberos,
             'help': "Start a kerberos ticket renewer",
@@ -935,7 +1296,7 @@ class CLIFactory(object):
             'args': (
                 'dag_id', 'task_id', 'execution_date', 'subdir',
                 'mark_success', 'force', 'pool',
-                'local', 'raw', 'ignore_dependencies',
+                'local', 'raw', 'ignore_all_dependencies', 'ignore_dependencies',
                 'ignore_depends_on_past', 'ship_dag', 'pickle', 'job_id'),
         }, {
             'func': initdb,
@@ -949,6 +1310,14 @@ class CLIFactory(object):
             'func': dag_state,
             'help': "Get the status of a dag run",
             'args': ('dag_id', 'execution_date', 'subdir'),
+        }, {
+            'func': task_failed_deps,
+            'help': (
+                "Returns the unmet dependencies for a task instance from the perspective "
+                "of the scheduler. In other words, why a task instance doesn't get "
+                "scheduled and then queued by the scheduler, and then run by an "
+                "executor)."),
+            'args': ('dag_id', 'task_id', 'execution_date', 'subdir'),
         }, {
             'func': task_state,
             'help': "Get the status of a task instance",
@@ -970,7 +1339,7 @@ class CLIFactory(object):
             'help': "Start a Airflow webserver instance",
             'args': ('port', 'workers', 'workerclass', 'worker_timeout', 'hostname',
                      'pid', 'daemon', 'stdout', 'stderr', 'access_logfile',
-                     'error_logfile', 'log_file', 'debug'),
+                     'error_logfile', 'log_file', 'ssl_cert', 'ssl_key', 'debug'),
         }, {
             'func': resetdb,
             'help': "Burn down and rebuild the metadata database",
@@ -982,8 +1351,9 @@ class CLIFactory(object):
         }, {
             'func': scheduler,
             'help': "Start a scheduler instance",
-            'args': ('dag_id_opt', 'subdir', 'num_runs', 'do_pickle',
-                     'pid', 'daemon', 'stdout', 'stderr', 'log_file'),
+            'args': ('dag_id_opt', 'subdir', 'run_duration', 'num_runs',
+                     'do_pickle', 'pid', 'daemon', 'stdout', 'stderr',
+                     'log_file'),
         }, {
             'func': worker,
             'help': "Start a Celery worker node",
@@ -992,7 +1362,7 @@ class CLIFactory(object):
         }, {
             'func': flower,
             'help': "Start a Celery Flower",
-            'args': ('flower_hostname', 'flower_port', 'broker_api',
+            'args': ('flower_hostname', 'flower_port', 'flower_conf', 'broker_api',
                      'pid', 'daemon', 'stdout', 'stderr', 'log_file'),
         }, {
             'func': version,
@@ -1025,6 +1395,7 @@ class CLIFactory(object):
                 sp.add_argument(*arg.flags, **kwargs)
             sp.set_defaults(func=sub['func'])
         return parser
+
 
 def get_parser():
     return CLIFactory.get_parser()
