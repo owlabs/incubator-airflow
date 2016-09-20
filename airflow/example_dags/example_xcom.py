@@ -33,13 +33,16 @@ dag = airflow.DAG(
 value_1 = [1, 2, 3]
 value_2 = {'a': 'b'}
 
+
 def push(**kwargs):
     # pushes an XCom without a specific target
     kwargs['ti'].xcom_push(key='value from pusher 1', value=value_1)
 
+
 def push_by_returning(**kwargs):
     # pushes an XCom without a specific target, just by returning it
     return value_2
+
 
 def puller(**kwargs):
     ti = kwargs['ti']
@@ -56,13 +59,13 @@ def puller(**kwargs):
     v1, v2 = ti.xcom_pull(key=None, task_ids=['push', 'push_by_returning'])
     assert (v1, v2) == (value_1, value_2)
 
-push1 = airflow.operators.PythonOperator(
+push1 = airflow.operators.python_operator.PythonOperator(
     task_id='push', dag=dag, python_callable=push)
 
-push2 = airflow.operators.PythonOperator(
+push2 = airflow.operators.python_operator.PythonOperator(
     task_id='push_by_returning', dag=dag, python_callable=push_by_returning)
 
-pull = airflow.operators.PythonOperator(
+pull = airflow.operators.python_operator.PythonOperator(
     task_id='puller', dag=dag, python_callable=puller)
 
 pull.set_upstream([push1, push2])

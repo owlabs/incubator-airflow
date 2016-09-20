@@ -11,23 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from airflow.operators.hive_to_druid import HiveToDruidTransfer
-from airflow import DAG
-from datetime import datetime
-
-args = {
-            'owner': 'qi_wang',
-            'start_date': datetime(2015, 4, 4),
-}
-
-dag = DAG("test_druid", default_args=args)
+from airflow.ti_deps.deps.base_ti_dep import BaseTIDep
+from airflow.utils.db import provide_session
+from airflow.utils.state import State
 
 
-HiveToDruidTransfer(task_id="load_dummy_test",
-                    sql="select * from qi.druid_test_dataset_w_platform_1 \
-                            limit 10;",
-                    druid_datasource="airflow_test",
-                    ts_dim="ds",
-                    dag=dag
-                )
+class NotSkippedDep(BaseTIDep):
+    NAME = "Task Instance Not Skipped"
+    IGNOREABLE = True
+
+    @provide_session
+    def _get_dep_statuses(self, ti, session, dep_context):
+        if ti.state == State.SKIPPED:
+            yield self._failing_status(reason="The task instance has been skipped.")

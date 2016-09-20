@@ -17,7 +17,7 @@ from builtins import str
 import logging
 
 from airflow.exceptions import AirflowException
-from airflow.hooks import BaseHook
+from airflow.hooks.base_hook import BaseHook
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 
@@ -30,8 +30,9 @@ class CheckOperator(BaseOperator):
     values return ``False`` the check is failed and errors out.
 
     Note that Python bool casting evals the following as ``False``:
-    * False
-    * 0
+
+    * ``False``
+    * ``0``
     * Empty string (``""``)
     * Empty list (``[]``)
     * Empty dictionary or set (``{}``)

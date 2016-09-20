@@ -24,6 +24,7 @@ import logging
 from airflow import configuration
 from airflow.exceptions import AirflowException
 
+
 class LoggingMixin(object):
     """
     Convenience super-class to have a logger configured with the class name
@@ -80,7 +81,6 @@ class S3Log(object):
         logging.error(err)
         return err if return_error else ''
 
-
     def write(self, log, remote_log_location, append=False):
         """
         Writes the log to the remote_log_location. Fails silently if no hook
@@ -128,7 +128,7 @@ class GCSLog(object):
         self.hook = None
 
         try:
-            from airflow.contrib.hooks import GoogleCloudStorageHook
+            from airflow.contrib.hooks.gcs_hook import GoogleCloudStorageHook
             self.hook = GoogleCloudStorageHook(
                 google_cloud_storage_conn_id=remote_conn_id)
         except:

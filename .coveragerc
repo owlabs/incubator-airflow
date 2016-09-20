@@ -12,4 +12,9 @@
 # limitations under the License.
 
 [report]
-omit = *contrib*
+omit =
+    *contrib*
+    tests/*
+    scripts/*
+    dev/*
+    airflow/migrations/*

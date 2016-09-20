@@ -16,6 +16,8 @@ from __future__ import print_function
 from future import standard_library
 standard_library.install_aliases()
 from builtins import str
+from past.builtins import basestring
+
 from datetime import datetime
 import logging
 from urllib.parse import urlparse
@@ -25,7 +27,7 @@ import airflow
 from airflow import hooks, settings
 from airflow.exceptions import AirflowException, AirflowSensorTimeout, AirflowSkipException
 from airflow.models import BaseOperator, TaskInstance, Connection as DB
-from airflow.hooks import BaseHook
+from airflow.hooks.base_hook import BaseHook
 from airflow.utils.state import State
 from airflow.utils.decorators import apply_defaults
 
@@ -90,6 +92,7 @@ class SqlSensor(BaseSensorOperator):
     """
     template_fields = ('sql',)
     template_ext = ('.hql', '.sql',)
+    ui_color = '#7c7287'
 
     @apply_defaults
     def __init__(self, conn_id, sql, *args, **kwargs):
@@ -133,6 +136,7 @@ class MetastorePartitionSensor(SqlSensor):
     :type mysql_conn_id: str
     """
     template_fields = ('partition_name', 'table', 'schema')
+    ui_color = '#8da7be'
 
     @apply_defaults
     def __init__(
@@ -179,9 +183,16 @@ class ExternalTaskSensor(BaseSensorOperator):
     :type allowed_states: list
     :param execution_delta: time difference with the previous execution to
         look at, the default is the same execution_date as the current task.
-        For yesterday, use [positive!] datetime.timedelta(days=1)
+        For yesterday, use [positive!] datetime.timedelta(days=1). Either
+        execution_delta or execution_date_fn can be passed to
+        ExternalTaskSensor, but not both.
     :type execution_delta: datetime.timedelta
+    :param execution_date_fn: function that receives the current execution date
+        and returns the desired execution date to query. Either execution_delta
+        or execution_date_fn can be passed to ExternalTaskSensor, but not both.
+    :type execution_date_fn: callable
     """
+    ui_color = '#19647e'
 
     @apply_defaults
     def __init__(
@@ -190,16 +201,25 @@ class ExternalTaskSensor(BaseSensorOperator):
             external_task_id,
             allowed_states=None,
             execution_delta=None,
+            execution_date_fn=None,
             *args, **kwargs):
         super(ExternalTaskSensor, self).__init__(*args, **kwargs)
         self.allowed_states = allowed_states or [State.SUCCESS]
+        if execution_delta is not None and execution_date_fn is not None:
+            raise ValueError(
+                'Only one of `execution_date` or `execution_date_fn` may'
+                'be provided to ExternalTaskSensor; not both.')
+
         self.execution_delta = execution_delta
+        self.execution_date_fn = execution_date_fn
         self.external_dag_id = external_dag_id
         self.external_task_id = external_task_id
 
     def poke(self, context):
         if self.execution_delta:
             dttm = context['execution_date'] - self.execution_delta
+        elif self.execution_date_fn:
+            dttm = self.execution_date_fn(context['execution_date'])
         else:
             dttm = context['execution_date']
 
@@ -222,23 +242,99 @@ class ExternalTaskSensor(BaseSensorOperator):
         return count
 
 
+class NamedHivePartitionSensor(BaseSensorOperator):
+    """
+    Waits for a set of partitions to show up in Hive.
+
+    :param partition_names: List of fully qualified names of the
+        partitions to wait for. A fully qualified name is of the
+        form ``schema.table/pk1=pv1/pk2=pv2``, for example,
+        default.users/ds=2016-01-01. This is passed as is to the metastore
+        Thrift client ``get_partitions_by_name`` method. Note that
+        you cannot use logical or comparison operators as in
+        HivePartitionSensor.
+    :type partition_names: list of strings
+    :param metastore_conn_id: reference to the metastore thrift service
+        connection id
+    :type metastore_conn_id: str
+    """
+
+    template_fields = ('partition_names', )
+    ui_color = '#8d99ae'
+
+    @apply_defaults
+    def __init__(
+            self,
+            partition_names,
+            metastore_conn_id='metastore_default',
+            poke_interval=60*3,
+            *args,
+            **kwargs):
+        super(NamedHivePartitionSensor, self).__init__(
+            poke_interval=poke_interval, *args, **kwargs)
+
+        if isinstance(partition_names, basestring):
+            raise TypeError('partition_names must be an array of strings')
+
+        self.metastore_conn_id = metastore_conn_id
+        self.partition_names = partition_names
+        self.next_poke_idx = 0
+
+    def parse_partition_name(self, partition):
+        try:
+            schema, table_partition = partition.split('.')
+            table, partition = table_partition.split('/', 1)
+            return schema, table, partition
+        except ValueError as e:
+            raise ValueError('Could not parse ' + partition)
+
+    def poke(self, context):
+
+        if not hasattr(self, 'hook'):
+            self.hook = airflow.hooks.hive_hooks.HiveMetastoreHook(
+                metastore_conn_id=self.metastore_conn_id)
+
+        def poke_partition(partition):
+
+            schema, table, partition = self.parse_partition_name(partition)
+
+            logging.info(
+                'Poking for {schema}.{table}/{partition}'.format(**locals())
+            )
+            return self.hook.check_for_named_partition(
+                schema, table, partition)
+
+        while self.next_poke_idx < len(self.partition_names):
+            if poke_partition(self.partition_names[self.next_poke_idx]):
+                self.next_poke_idx += 1
+            else:
+                return False
+
+        return True
+
+
 class HivePartitionSensor(BaseSensorOperator):
     """
-    Waits for a partition to show up in Hive
+    Waits for a partition to show up in Hive.
+
+    Note: Because ``partition`` supports general logical operators, it
+    can be inefficient. Consider using NamedHivePartitionSensor instead if
+    you don't need the full flexibility of HivePartitionSensor.
 
     :param table: The name of the table to wait for, supports the dot
         notation (my_database.my_table)
     :type table: string
     :param partition: The partition clause to wait for. This is passed as
-        is to the Metastore Thrift client "get_partitions_by_filter" method,
-        and apparently supports SQL like notation as in `ds='2015-01-01'
-        AND type='value'` and > < sings as in "ds>=2015-01-01"
+        is to the metastore Thrift client ``get_partitions_by_filter`` method,
+        and apparently supports SQL like notation as in ``ds='2015-01-01'
+        AND type='value'`` and comparison operators as in ``"ds>=2015-01-01"``
     :type partition: string
     :param metastore_conn_id: reference to the metastore thrift service
         connection id
     :type metastore_conn_id: str
     """
     template_fields = ('schema', 'table', 'partition',)
+    ui_color = '#2b2d42'
 
     @apply_defaults
     def __init__(
@@ -264,7 +360,6 @@ class HivePartitionSensor(BaseSensorOperator):
             'Poking for table {self.schema}.{self.table}, '
             'partition {self.partition}'.format(**locals()))
         if not hasattr(self, 'hook'):
-            import airflow.hooks.hive_hooks
             self.hook = airflow.hooks.hive_hooks.HiveMetastoreHook(
                 metastore_conn_id=self.metastore_conn_id)
         return self.hook.check_for_partition(
@@ -276,6 +371,7 @@ class HdfsSensor(BaseSensorOperator):
     Waits for a file or folder to land in HDFS
     """
     template_fields = ('filepath',)
+    ui_color = '#4d9de0'
 
     @apply_defaults
     def __init__(
@@ -519,7 +615,7 @@ class HttpSensor(BaseSensorOperator):
         self.extra_options = extra_options or {}
         self.response_check = response_check
 
-        self.hook = hooks.HttpHook(method='GET', http_conn_id=http_conn_id)
+        self.hook = hooks.http_hook.HttpHook(method='GET', http_conn_id=http_conn_id)
 
     def poke(self, context):
         logging.info('Poking: ' + self.endpoint)
