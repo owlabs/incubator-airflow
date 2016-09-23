@@ -439,7 +439,7 @@ class DagFileProcessor(AbstractDagFileProcessor):
             raise AirflowException("Tried to get start time before it started!")
         return self._start_time
 
-
+# THIS IS THE CLASS THAT CONTAINS ALL OF THE SCHEDULER STUFF
 class SchedulerJob(BaseJob):
     """
     This SchedulerJob runs for a specific time interval and schedules the jobs
@@ -690,9 +690,11 @@ class SchedulerJob(BaseJob):
                 external_trigger=False,
                 session=session
             )
+            # WE PROBABLY WANT TO DO SOMETHING HERE SO MAKE SURE THAT THE MAX ACTIVE RUNS IS ALWAYS 1 - PROBABLY A GLOBAL OVERRIDE SETTING
             # return if already reached maximum active runs and no timeout setting
             if len(active_runs) >= dag.max_active_runs and not dag.dagrun_timeout:
                 return
+            # WE SHOULD INVESTIGATE TIMEOUTS AND WORK OUT WHETHER THEY CAN OCCUR FOR VALIDLY LONG RUNNING TASKS.
             timedout_runs = 0
             for dr in active_runs:
                 if (
@@ -705,6 +707,9 @@ class SchedulerJob(BaseJob):
             if len(active_runs) - timedout_runs >= dag.max_active_runs:
                 return
 
+            # THIS SEEMS LIKE A GOOD IMPROVEMENT TO MAKE WHILE WE'RE HERE. PRESUMABLY IT'S GOING TO BE SOMETHING SIMILAR TO THE active_runs DECLARATION ABOVE.
+            # THIS COULD ALSO DO WITH SOME TESTING/SCRUTINY TO IDENTIFY WHETHER THE CURRENT SETUP WILL FILL IN MISSING RUNS BEFORE THE LAST RUN, OR JUST THOSE AFTER THE LAST RUN.
+            # BASED ON THE "make sure backfills are also considered" SECTION BELOW, I THINK IT MIGHT BE THE LATTER.
             # this query should be replaced by find dagrun
             qry = (
                 session.query(func.max(DagRun.execution_date))
@@ -722,6 +727,7 @@ class SchedulerJob(BaseJob):
                 return None
 
             next_run_date = None
+            # I RECKON WE CAN ADD A GLOBAL SETTING TO TWEAK THIS SECTION SO IT WON'T PRODUCE A next_run_date THAT IS IN THE PAST. PROBABLY VIA A LOOP AT THE END USING dag.following_schedule
             if not last_scheduled_run:
                 # First run
                 task_start_dates = [t.start_date for t in dag.tasks]
@@ -732,6 +738,7 @@ class SchedulerJob(BaseJob):
             else:
                 next_run_date = dag.following_schedule(last_scheduled_run)
 
+            # IF WE UPDATE THE QUERY ABOVE ("this query should be replaced by find dagrun"), THEN THIS MIGHT BECOME UNNECESSARY.
             # make sure backfills are also considered
             last_run = dag.get_last_dagrun(session=session)
             if last_run and next_run_date:
@@ -740,6 +747,7 @@ class SchedulerJob(BaseJob):
 
             # don't ever schedule prior to the dag's start_date
             if dag.start_date:
+                # WHAT IS THIS SYNTAX?
                 next_run_date = (dag.start_date if not next_run_date
                                  else max(next_run_date, dag.start_date))
                 if next_run_date == dag.start_date:
@@ -747,6 +755,8 @@ class SchedulerJob(BaseJob):
 
                 self.logger.debug("Dag start date: {}. Next run date: {}"
                                   .format(dag.start_date, next_run_date))
+
+            # I THINK HERE IS WHER WE WANT TO ADD OUR "DON'T RUN IN THE PAST" LOOP.
 
             # this structure is necessary to avoid a TypeError from concatenating
             # NoneType
@@ -886,7 +896,7 @@ class SchedulerJob(BaseJob):
                                          task_instance.execution_date,
                                          dag_runs))
 
-            dag_is_running = True
+            dag_is_running = True # I HAVE A STRONG SUSPICION THIS SHOULD BE SET TO FALSE HERE...
             for dag_run in dag_runs:
                 if dag_run.state == State.RUNNING:
                     dag_is_running = True
@@ -1004,7 +1014,7 @@ class SchedulerJob(BaseJob):
                                  .format(dag_id,
                                          current_task_concurrency,
                                          task_concurrency_limit))
-                if current_task_concurrency > task_concurrency_limit:
+                if current_task_concurrency > task_concurrency_limit: # I CAN'T SEE WHY THIS ISN'T >= TO MATCH THE LOG MESSAGE BELOW.
                     self.logger.info("Not executing {} since the number "
                                      "of tasks running from DAG {} is >= to the "
                                      "DAG's task concurrency limit of {}"
@@ -1046,6 +1056,7 @@ class SchedulerJob(BaseJob):
                 task_id_ = task_instance.task_id
                 dag_id_ = task_instance.dag_id
                 execution_date_ = task_instance.execution_date
+                # SOMEONE'S GOING TO NEED TO WORK OUT WHAT THIS IS ALL ABOUT. IS IT A STANDARD PYTHON THING? OR MORE COMPLEX THAN THAT?
                 make_transient(task_instance)
                 task_instance.task_id = task_id_
                 task_instance.dag_id = dag_id_
