@@ -1219,6 +1219,7 @@ class SchedulerJob(BaseJob):
         logging.basicConfig(level=logging.DEBUG)
 
         # DAGs can be pickled for easier remote execution by some executors
+        # WE REALLY NEED TO WORK OUT AND WRITE DOWN WHAT PICKLING DOES.
         pickle_dags = False
         if self.do_pickle and self.executor.__class__ not in \
                 (executors.LocalExecutor, executors.SequentialExecutor):
