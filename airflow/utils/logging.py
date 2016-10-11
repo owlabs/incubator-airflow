@@ -34,31 +34,31 @@ class _LoggingController(object):
     """
     def __init__(self):
 
-        self.rootLogPath = os.path.expanduser(
+        self._rootLogPath = os.path.expanduser(
                                 configuration.get('core',
                                                   'BASE_LOG_FOLDER'))
 
-        self.debug_log_file_location = '%s/debug.log' % self.rootLogPath
-        self.debug_file_log_handler = logging.FileHandler(
-            self.debug_log_file_location)
-        self.debug_file_log_handler.format(logging.Formatter(LOG_FORMAT))
-        self.debug_file_log_handler.setLevel(logging.DEBUG)
+        self._debug_log_file_location = '%s/debug.log' % self._rootLogPath
+        self._debug_file_log_handler = logging.FileHandler(
+            self._debug_log_file_location)
+        self._debug_file_log_handler.format(logging.Formatter(LOG_FORMAT))
+        self._debug_file_log_handler.setLevel(logging.DEBUG)
 
-        self.error_log_file_location = '%s/error.log' % self.rootLogPath
-        self.error_file_log_handler = logging.FileHandler(
-            self.error_log_file_location)
-        self.error_file_log_handler.format(logging.Formatter(LOG_FORMAT))
-        self.error_file_log_handler.setLevel(logging.ERROR)
+        self._error_log_file_location = '%s/error.log' % self._rootLogPath
+        self._error_file_log_handler = logging.FileHandler(
+            self._error_log_file_location)
+        self._error_file_log_handler.format(logging.Formatter(LOG_FORMAT))
+        self._error_file_log_handler.setLevel(logging.ERROR)
 
-        self.console_log_handler = logging.StreamHandler()
-        self.console_log_handler.format(logging.Formatter(LOG_FORMAT))
-        self.console_log_handler.setLevel(LOGGING_LEVEL)
+        self._console_log_handler = logging.StreamHandler()
+        self._console_log_handler.format(logging.Formatter(LOG_FORMAT))
+        self._console_log_handler.setLevel(LOGGING_LEVEL)
 
         # Get and store a logger object to use as a base for all other logger
         # objects used within Airflow.
-        self.airflowLogger = logging.root.getChild('airflow')
+        self._logger = logging.root.getChild('airflow')
 
-        # TODO: replace with config setting CLEAR_PARENT_LOGGING_SETTINGS
+        # TODO: replace with config setting CLEAR_INHERITED_LOGGING_SETTINGS
         if True:
             self.clear_handlers()
 
@@ -81,7 +81,7 @@ class _LoggingController(object):
         been set up explicitly for the airflow logger.
         :return: none
         """
-        self.airflowLogger.handlers = []
+        self._logger.handlers = []
 
     def enable_debug_file_log(self):
         """
@@ -89,7 +89,7 @@ class _LoggingController(object):
         into a debug.log file in the BASE_LOG_FOLDER defined in airflow.cfg.
         :return: none
         """
-        self.airflowLogger.addHandler(self.debug_file_log_handler)
+        self._logger.addHandler(self._debug_file_log_handler)
 
     def disable_debug_file_log(self):
         """
@@ -97,7 +97,7 @@ class _LoggingController(object):
         enable_debug_file_log function.
         :return: none
         """
-        self.airflowLogger.removeHandler(self.debug_file_log_handler)
+        self._logger.removeHandler(self._debug_file_log_handler)
 
     def enable_error_file_log(self):
         """
@@ -105,7 +105,7 @@ class _LoggingController(object):
         into an error.log file in the BASE_LOG_FOLDER defined in airflow.cfg.
         :return: none
         """
-        self.airflowLogger.addHandler(self.error_file_log_handler)
+        self._logger.addHandler(self._error_file_log_handler)
 
     def disable_error_file_log(self):
         """
@@ -113,7 +113,7 @@ class _LoggingController(object):
         enable_error_file_log function.
         :return: none
         """
-        self.airflowLogger.removeHandler(self.error_file_log_handler)
+        self._logger.removeHandler(self._error_file_log_handler)
 
     def enable_console_log(self):
         """
@@ -122,7 +122,7 @@ class _LoggingController(object):
         setting.
         :return: none
         """
-        self.airflowLogger.addHandler(self.console_log_handler)
+        self._logger.addHandler(self._console_log_handler)
 
     def disable_console_log(self):
         """
@@ -130,7 +130,7 @@ class _LoggingController(object):
         enable_console_log function.
         :return: none
         """
-        self.airflowLogger.removeHandler(self.console_log_handler)
+        self._logger.removeHandler(self._console_log_handler)
 
 logging_controller = _LoggingController()
 
