@@ -20,10 +20,119 @@ from __future__ import unicode_literals
 from builtins import object
 
 import logging
+import os
 
 from airflow import configuration
 from airflow.exceptions import AirflowException
-from airflow.settings import LOGGING_LEVEL
+from airflow.settings import LOGGING_LEVEL, LOG_FORMAT
+
+
+class _LoggingController(object):
+    """
+    Utility class to provide a central management point for controlling the
+    base Airflow logging settings.
+    """
+    def __init__(self):
+
+        self._rootLogPath = os.path.expanduser(
+                                configuration.get('core',
+                                                  'BASE_LOG_FOLDER'))
+
+        self._debug_log_file_location = '%s/debug.log' % self._rootLogPath
+        self._debug_file_log_handler = logging.FileHandler(
+            self._debug_log_file_location)
+        self._debug_file_log_handler.format(logging.Formatter(LOG_FORMAT))
+        self._debug_file_log_handler.setLevel(logging.DEBUG)
+
+        self._error_log_file_location = '%s/error.log' % self._rootLogPath
+        self._error_file_log_handler = logging.FileHandler(
+            self._error_log_file_location)
+        self._error_file_log_handler.format(logging.Formatter(LOG_FORMAT))
+        self._error_file_log_handler.setLevel(logging.ERROR)
+
+        self._console_log_handler = logging.StreamHandler()
+        self._console_log_handler.format(logging.Formatter(LOG_FORMAT))
+        self._console_log_handler.setLevel(LOGGING_LEVEL)
+
+        # Get and store a logger object to use as a base for all other logger
+        # objects used within Airflow.
+        self._logger = logging.root.getChild('airflow')
+
+        # TODO: replace with config setting CLEAR_INHERITED_LOGGING_SETTINGS
+        if True:
+            self.clear_handlers()
+
+        # TODO: replace with config setting LOG_TO_DEBUG_FILE
+        if True:
+            self.enable_debug_file_log()
+
+        # TODO: replace with config setting LOG_TO_ERROR_FILE
+        if True:
+            self.enable_error_file_log()
+
+        # TODO: replace with config setting LOG_TO_CONSOLE
+        if True:
+            self.enable_console_log()
+
+    def clear_handlers(self):
+        """
+        Removes all handlers from the airflow logger object. This will disable
+        any handlers inherited from the root logger as well as any that have
+        been set up explicitly for the airflow logger.
+        :return: none
+        """
+        self._logger.handlers = []
+
+    def enable_debug_file_log(self):
+        """
+        Adds a handler to the airflow logger object to write every log message
+        into a debug.log file in the BASE_LOG_FOLDER defined in airflow.cfg.
+        :return: none
+        """
+        self._logger.addHandler(self._debug_file_log_handler)
+
+    def disable_debug_file_log(self):
+        """
+        Removes the handler from the airflow logger object that is added by the
+        enable_debug_file_log function.
+        :return: none
+        """
+        self._logger.removeHandler(self._debug_file_log_handler)
+
+    def enable_error_file_log(self):
+        """
+        Adds a handler to the airflow logger object to write error log messages
+        into an error.log file in the BASE_LOG_FOLDER defined in airflow.cfg.
+        :return: none
+        """
+        self._logger.addHandler(self._error_file_log_handler)
+
+    def disable_error_file_log(self):
+        """
+        Removes the handler from the airflow logger object that is added by the
+        enable_error_file_log function.
+        :return: none
+        """
+        self._logger.removeHandler(self._error_file_log_handler)
+
+    def enable_console_log(self):
+        """
+        Adds a handler to the airflow logger object to log messages to the
+        console. The level of the log messages is defined by the LOGGING_LEVEL
+        setting.
+        :return: none
+        """
+        self._logger.addHandler(self._console_log_handler)
+
+    def disable_console_log(self):
+        """
+        Removes the handler from the airflow logger object that is added by the
+        enable_console_log function.
+        :return: none
+        """
+        self._logger.removeHandler(self._console_log_handler)
+
+logging_controller = _LoggingController()
 
 
 class LoggingMixin(object):
@@ -36,7 +145,7 @@ class LoggingMixin(object):
         try:
             return self._logger
         except AttributeError:
-            self._logger = logging.root.getChild(
+            self._logger = logging.getLogger('airflow').getChild(
                 self.__class__.__module__ + '.' + self.__class__.__name__
             )
             self._logger.setLevel(LOGGING_LEVEL)

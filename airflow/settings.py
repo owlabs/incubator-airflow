@@ -66,7 +66,6 @@ ___  ___ |  / _  /   _  __/ _  / / /_/ /_ |/ |/ /
  _/_/  |_/_/  /_/    /_/    /_/  \____/____/|__/
  """
 
-BASE_LOG_URL = '/admin/airflow/log'
 AIRFLOW_HOME = os.path.expanduser(conf.get('core', 'AIRFLOW_HOME'))
 SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
 LOGGING_LEVEL = logging.INFO
