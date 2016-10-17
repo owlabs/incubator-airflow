@@ -26,6 +26,8 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 
 from airflow import configuration as conf
 
+_log = logging.getLogger(__name__)
+
 
 class DummyStatsLogger(object):
 
@@ -139,7 +141,7 @@ def configure_orm():
 
 try:
     from airflow_local_settings import *
-    logging.info("Loaded airflow_local_settings.")
+    _log.info("Loaded airflow_local_settings.")
 except:
     pass
 

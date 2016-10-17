@@ -30,6 +30,7 @@ from airflow import settings
 from airflow import configuration
 
 csrf = CsrfProtect()
+_log = logging.getLogger(__name__)
 
 
 def create_app(config=None):
@@ -110,13 +111,13 @@ def create_app(config=None):
             from airflow.plugins_manager import (
                 admin_views, flask_blueprints, menu_links)
             for v in admin_views:
-                logging.info('Adding view ' + v.name)
+                _log.info('Adding view ' + v.name)
                 admin.add_view(v)
             for bp in flask_blueprints:
-                logging.info('Adding blueprint ' + bp.name)
+                _log.info('Adding blueprint ' + bp.name)
                 app.register_blueprint(bp)
             for ml in sorted(menu_links, key=lambda x: x.name):
-                logging.info('Adding menu link ' + ml.name)
+                _log.info('Adding menu link ' + ml.name)
                 admin.add_link(ml)
 
         integrate_plugins()

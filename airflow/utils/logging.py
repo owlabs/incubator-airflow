@@ -152,7 +152,7 @@ class LoggingMixin(object):
             return self._logger
 
 
-class S3Log(object):
+class S3Log(LoggingMixin):
     """
     Utility class for reading and writing logs in S3.
     Requires airflow[s3] and setting the REMOTE_BASE_LOG_FOLDER and
@@ -165,7 +165,7 @@ class S3Log(object):
             self.hook = S3Hook(remote_conn_id)
         except:
             self.hook = None
-            logging.error(
+            self.logger.error(
                 'Could not create an S3Hook with connection id "{}". '
                 'Please make sure that airflow[s3] is installed and '
                 'the S3 connection exists.'.format(remote_conn_id))
@@ -191,7 +191,7 @@ class S3Log(object):
 
         # raise/return error if we get here
         err = 'Could not read logs from {}'.format(remote_log_location)
-        logging.error(err)
+        self.logger.error(err)
         return err if return_error else ''
 
     def write(self, log, remote_log_location, append=False):
@@ -224,10 +224,11 @@ class S3Log(object):
                 pass
 
         # raise/return error if we get here
-        logging.error('Could not write logs to {}'.format(remote_log_location))
+        self.logger.error('Could not write logs to {}'.format(
+            remote_log_location))
 
 
-class GCSLog(object):
+class GCSLog(LoggingMixin):
     """
     Utility class for reading and writing logs in GCS. Requires
     airflow[gcp_api] and setting the REMOTE_BASE_LOG_FOLDER and
@@ -245,7 +246,7 @@ class GCSLog(object):
             self.hook = GoogleCloudStorageHook(
                 google_cloud_storage_conn_id=remote_conn_id)
         except:
-            logging.error(
+            self.logger.error(
                 'Could not create a GoogleCloudStorageHook with connection id '
                 '"{}". Please make sure that airflow[gcp_api] is installed '
                 'and the GCS connection exists.'.format(remote_conn_id))
@@ -269,7 +270,7 @@ class GCSLog(object):
 
         # raise/return error if we get here
         err = 'Could not read logs from {}'.format(remote_log_location)
-        logging.error(err)
+        self.logger.error(err)
         return err if return_error else ''
 
     def write(self, log, remote_log_location, append=False):
@@ -303,7 +304,8 @@ class GCSLog(object):
                     self.hook.upload(bkt, blob, tmpfile.name)
             except:
                 # raise/return error if we get here
-                logging.error('Could not write logs to {}'.format(remote_log_location))
+                self.logger.error('Could not write logs to {}'.format(
+                    remote_log_location))
 
     def parse_gcs_url(self, gsurl):
         """

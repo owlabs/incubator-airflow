@@ -22,6 +22,8 @@ import sys
 from airflow.hooks.base_hook import BaseHook
 from airflow.exceptions import AirflowException
 
+_log = logging.getLogger(__name__)
+
 
 class DbApiHook(BaseHook):
     """
@@ -146,7 +148,7 @@ class DbApiHook(BaseHook):
         for s in sql:
             if sys.version_info[0] < 3:
                 s = s.encode('utf-8')
-            logging.info(s)
+            _log.info(s)
             if parameters is not None:
                 cur.execute(s, parameters)
             else:
@@ -203,12 +205,12 @@ class DbApiHook(BaseHook):
             cur.execute(sql)
             if commit_every and i % commit_every == 0:
                 conn.commit()
-                logging.info(
+                _log.info(
                     "Loaded {i} into {table} rows so far".format(**locals()))
         conn.commit()
         cur.close()
         conn.close()
-        logging.info(
+        _log.info(
             "Done loading. Loaded a total of {i} rows".format(**locals()))
 
     @staticmethod
