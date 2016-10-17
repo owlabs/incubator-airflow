@@ -53,7 +53,9 @@ from airflow.www import app as application
 from airflow.settings import Session
 from airflow.utils.state import State
 from airflow.utils.dates import round_time
-from airflow.utils.logging import LoggingMixin
+from airflow.utils.logging import LoggingMixin,\
+                                  setup_stream_logging,\
+                                  setup_file_logging
 from lxml import html
 from airflow.exceptions import AirflowException
 from airflow.configuration import AirflowConfigException
@@ -898,7 +900,7 @@ class CliLoggingTests(unittest.TestCase):
 
     def test_setup_stream_logging(self):
         # Make sure our handler is getting messages.
-        self.handler = cli.setup_stream_logging()
+        self.handler = setup_stream_logging()
         stream = StringIO()
         self.handler.stream = stream  # Override stderr default stream.
         logger = logging.getLogger()
@@ -907,7 +909,7 @@ class CliLoggingTests(unittest.TestCase):
 
     def test_setup_file_logging(self):
         with NamedTemporaryFile('w+t') as tempfile:
-            self.handler = cli.setup_file_logging(tempfile.name)
+            self.handler = setup_file_logging(tempfile.name)
             logger = logging.getLogger()
             logger.info("test message")
             tempfile.seek(0)

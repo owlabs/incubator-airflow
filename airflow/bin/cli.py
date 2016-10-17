@@ -81,32 +81,6 @@ def sigquit_handler(sig, frame):
     print("\n".join(code))
 
 
-def setup_file_logging(filename, fmt=settings.SIMPLE_LOG_FORMAT):
-    handler = logging.FileHandler(filename)
-    formatter = logging.Formatter(fmt)
-    handler.setFormatter(formatter)
-    handler.setLevel(settings.LOGGING_LEVEL)
-
-    root = logging.getLogger()
-    root.addHandler(handler)
-
-    return handler
-
-
-def setup_stream_logging(
-    fmt=settings.SIMPLE_LOG_FORMAT, level=settings.LOGGING_LEVEL
-):
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(fmt)
-    handler.setFormatter(formatter)
-    handler.setLevel(level)
-
-    root = logging.getLogger()
-    root.addHandler(handler)
-
-    return handler
-
-
 def setup_locations(process, pid=None, stdout=None, stderr=None, log=None):
     if not stderr:
         stderr = os.path.join(os.path.expanduser(settings.AIRFLOW_HOME), "airflow-{}.err".format(process))
@@ -140,7 +114,7 @@ def get_dag(args):
 
 
 def backfill(args, dag=None):
-    setup_stream_logging()
+    logging_utils.logging_controller.enable_console_log()
     dag = dag or get_dag(args)
 
     if not args.start_date and not args.end_date:
@@ -341,14 +315,13 @@ def run(args, dag=None):
         args.dag_id = dag.dag_id
 
     # Setting up logging
-    log_base = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
-    directory = log_base + "/{args.dag_id}/{args.task_id}".format(args=args)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+    directory = "/{args.dag_id}/{args.task_id}".format(args=args)
     iso = args.execution_date.isoformat()
     filename = "{directory}/{iso}".format(**locals())
 
-    handler = setup_file_logging(filename, settings.LOG_FORMAT)
+    handler = logging_utils.setup_file_logging(_log,
+                                               filename,
+                                               settings.LOG_FORMAT)
 
     if not args.pickle and not dag:
         dag = get_dag(args)
@@ -437,6 +410,12 @@ def run(args, dag=None):
             'update airflow.cfg to ensure future compatibility.',
             DeprecationWarning)
         remote_base = conf.get('core', 'S3_LOG_FOLDER')
+
+    # Add the root path to the filename to get the absolute path. This is now
+    # taken care of inside the setup_file_logging method above, but we need the
+    # absolute path now for the remote logging.
+    log_base = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
+    filename = log_base + directory
 
     if os.path.exists(filename):
         # read log and remove old logs to get just the latest additions
@@ -564,7 +543,7 @@ def render(args):
 
 
 def clear(args):
-    setup_stream_logging()
+    logging_utils.logging_controller.enable_console_log()
     dag = get_dag(args)
 
     if args.task_regex:
@@ -876,7 +855,7 @@ def resetdb(args):
     if args.yes or input(
             "This will drop existing tables if they exist. "
             "Proceed? (y/n)").upper() == "Y":
-        setup_stream_logging()
+        logging_utils.logging_controller.enable_console_log()
         db_utils.resetdb()
     else:
         print("Bail.")

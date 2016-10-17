@@ -24,8 +24,10 @@ import os
 
 from airflow import configuration
 from airflow.exceptions import AirflowException
-from airflow.settings import LOGGING_LEVEL, LOG_FORMAT
+from airflow.settings import LOGGING_LEVEL, LOG_FORMAT, SIMPLE_LOG_FORMAT
 
+BASE_LOG_FOLDER = os.path.expanduser(configuration.get('core',
+                                                    'BASE_LOG_FOLDER'))
 
 class _LoggingController(object):
     """
@@ -34,17 +36,13 @@ class _LoggingController(object):
     """
     def __init__(self):
 
-        self._rootLogPath = os.path.expanduser(
-                                configuration.get('core',
-                                                  'BASE_LOG_FOLDER'))
-
-        self._debug_log_file_location = '%s/debug.log' % self._rootLogPath
+        self._debug_log_file_location = '%s/debug.log' % BASE_LOG_FOLDER
         self._debug_file_log_handler = logging.FileHandler(
             self._debug_log_file_location)
         self._debug_file_log_handler.format(logging.Formatter(LOG_FORMAT))
         self._debug_file_log_handler.setLevel(logging.DEBUG)
 
-        self._error_log_file_location = '%s/error.log' % self._rootLogPath
+        self._error_log_file_location = '%s/error.log' % BASE_LOG_FOLDER
         self._error_file_log_handler = logging.FileHandler(
             self._error_log_file_location)
         self._error_file_log_handler.format(logging.Formatter(LOG_FORMAT))
@@ -133,6 +131,54 @@ class _LoggingController(object):
         self._logger.removeHandler(self._console_log_handler)
 
 logging_controller = _LoggingController()
+
+
+def setup_file_logging(logger,
+                       filename,
+                       fmt=SIMPLE_LOG_FORMAT,
+                       level=LOGGING_LEVEL):
+    """
+    Adds logging to the given file within the configured BASE_LOG_FOLDER to the
+    given logger object.
+    :param logger: The logger object to add a new FileHandler to.
+    :param filename: The filename (or relative path) to log to within the
+    BASE_LOG_FOLDER.
+    :param fmt: The format to apply to this new handler.
+    :param level: The logging level to apply to this new handler
+    :return: The FileHandler object that has been added to the logger. This is
+    returned such that it can later be removed from the logger if required.
+    """
+    file_path = os.path.join(BASE_LOG_FOLDER, filename)
+    directory = os.path.dirname(file_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    handler = logging.FileHandler(file_path)
+    formatter = logging.Formatter(fmt)
+    handler.setFormatter(formatter)
+    handler.setLevel(level)
+
+    logger.addHandler(handler)
+
+    return handler
+
+
+def setup_stream_logging(logger, fmt=SIMPLE_LOG_FORMAT, level=LOGGING_LEVEL):
+    """
+    Adds logging to the console to the given logger object.
+    :param logger: The logger object to add a new StreamHandler to.
+    :param fmt: The format to apply to this new handler.
+    :param level: The logging level to apply to this new handler
+    :return: The StreanHandler object that has been added to the logger. This
+    is returned such that it can later be removed from the logger if required.
+    """
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(fmt)
+    handler.setFormatter(formatter)
+    handler.setLevel(level)
+
+    logger.addHandler(handler)
+
+    return handler
 
 
 class LoggingMixin(object):
