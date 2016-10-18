@@ -36,6 +36,9 @@ class _LoggingController(object):
     """
     def __init__(self):
 
+        if not os.path.exists(BASE_LOG_FOLDER):
+            os.makedirs(BASE_LOG_FOLDER)
+
         self._debug_log_file_location = '%s/debug.log' % BASE_LOG_FOLDER
         self._debug_file_log_handler = logging.FileHandler(
             self._debug_log_file_location)
