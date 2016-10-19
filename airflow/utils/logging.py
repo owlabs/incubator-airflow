@@ -29,6 +29,9 @@ from airflow.settings import LOGGING_LEVEL, LOG_FORMAT, SIMPLE_LOG_FORMAT
 BASE_LOG_FOLDER = os.path.expanduser(configuration.get('core',
                                                     'BASE_LOG_FOLDER'))
 
+_log = logging.getLogger(__name__)
+
+
 class _LoggingController(object):
     """
     Utility class to provide a central management point for controlling the
@@ -153,12 +156,15 @@ def setup_file_logging(logger,
     """
     file_path = os.path.join(BASE_LOG_FOLDER, filename)
     directory = os.path.dirname(file_path)
+    _log.debug('Adding logging to {} into folder: {}', logger.name, directory)
     if not os.path.exists(directory):
         os.makedirs(directory)
     handler = logging.FileHandler(file_path)
     formatter = logging.Formatter(fmt)
     handler.setFormatter(formatter)
     handler.setLevel(level)
+
+    _log.debug('Adding logging to {} into file: {}', logger.name, file_path)
 
     logger.addHandler(handler)
 
