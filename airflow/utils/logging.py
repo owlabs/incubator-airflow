@@ -42,17 +42,17 @@ class _LoggingController(object):
         self._debug_log_file_location = '%s/debug.log' % BASE_LOG_FOLDER
         self._debug_file_log_handler = logging.FileHandler(
             self._debug_log_file_location)
-        self._debug_file_log_handler.format(logging.Formatter(LOG_FORMAT))
+        self._debug_file_log_handler.setFormatter(logging.Formatter(LOG_FORMAT))
         self._debug_file_log_handler.setLevel(logging.DEBUG)
 
         self._error_log_file_location = '%s/error.log' % BASE_LOG_FOLDER
         self._error_file_log_handler = logging.FileHandler(
             self._error_log_file_location)
-        self._error_file_log_handler.format(logging.Formatter(LOG_FORMAT))
+        self._error_file_log_handler.setFormatter(logging.Formatter(LOG_FORMAT))
         self._error_file_log_handler.setLevel(logging.ERROR)
 
         self._console_log_handler = logging.StreamHandler()
-        self._console_log_handler.format(logging.Formatter(LOG_FORMAT))
+        self._console_log_handler.setFormatter(logging.Formatter(LOG_FORMAT))
         self._console_log_handler.setLevel(LOGGING_LEVEL)
 
         # Get and store a logger object to use as a base for all other logger
