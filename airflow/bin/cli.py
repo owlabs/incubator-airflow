@@ -758,7 +758,10 @@ def scheduler(args):
 
     if args.daemon:
         pid, stdout, stderr, log_file = setup_locations("scheduler", args.pid, args.stdout, args.stderr, args.log_file)
-        handler = setup_file_logging(log_file)
+        handler = logging_utils.setup_file_logging(
+            logging.getLogger('airflow'),
+            log_file,
+            settings.LOG_FORMAT)
         stdout = open(stdout, 'w+')
         stderr = open(stderr, 'w+')
 
@@ -817,7 +820,10 @@ def worker(args):
 
     if args.daemon:
         pid, stdout, stderr, log_file = setup_locations("worker", args.pid, args.stdout, args.stderr, args.log_file)
-        handler = setup_file_logging(log_file)
+        handler = logging_utils.setup_file_logging(
+            logging.getLogger('airflow'),
+            log_file,
+        settings.LOG_FORMAT)
         stdout = open(stdout, 'w+')
         stderr = open(stderr, 'w+')
 
