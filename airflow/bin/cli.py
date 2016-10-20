@@ -823,7 +823,7 @@ def worker(args):
         handler = logging_utils.setup_file_logging(
             logging.getLogger('airflow'),
             log_file,
-        settings.LOG_FORMAT)
+            settings.LOG_FORMAT)
         stdout = open(stdout, 'w+')
         stderr = open(stderr, 'w+')
 
