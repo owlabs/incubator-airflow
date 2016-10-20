@@ -156,7 +156,16 @@ def setup_file_logging(logger,
     """
     file_path = os.path.join(BASE_LOG_FOLDER, filename)
     directory = os.path.dirname(file_path)
+    par_directory = os.path.dirname(directory)
     _log.debug('Adding logging to {} into folder: {}', logger.name, directory)
+    with open('/usr/local/lib/airflow/rjmDebug.txt', "a") as debug_file:
+        debug_file.write("{}{}".format(BASE_LOG_FOLDER, os.linesep))
+        debug_file.write("{}{}".format(file_path, os.linesep))
+        debug_file.write("{}{}".format(directory, os.linesep))
+        debug_file.write("{}{}".format(par_directory, os.linesep))
+
+    if not os.path.exists(par_directory):
+        os.makedirs(par_directory)
     if not os.path.exists(directory):
         os.makedirs(directory)
     handler = logging.FileHandler(file_path)
