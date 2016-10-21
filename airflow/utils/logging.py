@@ -205,7 +205,7 @@ class LoggingMixin(object):
         try:
             return self._logger
         except AttributeError:
-            self._logger = logging.getLogger('airflow').getChild(
+            self._logger = logging.getLogger(
                 self.__class__.__module__ + '.' + self.__class__.__name__
             )
             self._logger.setLevel(LOGGING_LEVEL)
