@@ -319,7 +319,9 @@ def run(args, dag=None):
     iso = args.execution_date.isoformat()
     filename = "{directory}/{iso}".format(**locals())
 
-    handler = logging_utils.setup_file_logging(_log,
+    # Add handler to root logger to affect the entire process, otherwise
+    # the new handler is not applied to the logging outside of this file.
+    handler = logging_utils.setup_file_logging(logging.getLogger('airflow'),
                                                filename,
                                                settings.LOG_FORMAT)
 
