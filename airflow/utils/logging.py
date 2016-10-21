@@ -59,8 +59,10 @@ class _LoggingController(object):
         self._console_log_handler.setLevel(LOGGING_LEVEL)
 
         # Get and store a logger object to use as a base for all other logger
-        # objects used within Airflow.
+        # objects used within Airflow. This object needs a logging level of
+        # debug to allow any handlers to have a logging level of debug.
         self._logger = logging.root.getChild('airflow')
+        self._logger.setLevel(logging.DEBUG)
 
         # TODO: replace with config setting CLEAR_INHERITED_LOGGING_SETTINGS
         if True:
