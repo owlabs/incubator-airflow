@@ -24,10 +24,7 @@ import os
 
 from airflow import configuration
 from airflow.exceptions import AirflowException
-from airflow.settings import LOGGING_LEVEL,\
-                             LOG_FORMAT,\
-                             SIMPLE_LOG_FORMAT,\
-                             LOG_FORMAT_WITH_THREAD_NAME
+from airflow.settings import LOGGING_LEVEL, LOG_FORMAT, SIMPLE_LOG_FORMAT
 
 BASE_LOG_FOLDER = os.path.expanduser(
     configuration.get('core', 'BASE_LOG_FOLDER'))
@@ -48,15 +45,13 @@ class _LoggingController(object):
         self._debug_log_file_location = '{}/debug.log'.format(BASE_LOG_FOLDER)
         self._debug_file_log_handler = logging.FileHandler(
             self._debug_log_file_location)
-        self._debug_file_log_handler.setFormatter(
-            logging.Formatter(LOG_FORMAT_WITH_THREAD_NAME))
+        self._debug_file_log_handler.setFormatter(logging.Formatter(LOG_FORMAT))
         self._debug_file_log_handler.setLevel(logging.DEBUG)
 
         self._error_log_file_location = '{}/error.log'.format(BASE_LOG_FOLDER)
         self._error_file_log_handler = logging.FileHandler(
             self._error_log_file_location)
-        self._error_file_log_handler.setFormatter(
-            logging.Formatter(LOG_FORMAT_WITH_THREAD_NAME))
+        self._error_file_log_handler.setFormatter(logging.Formatter(LOG_FORMAT))
         self._error_file_log_handler.setLevel(logging.ERROR)
 
         self._console_log_handler = logging.StreamHandler()
