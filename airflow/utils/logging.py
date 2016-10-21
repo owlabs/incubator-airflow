@@ -26,8 +26,8 @@ from airflow import configuration
 from airflow.exceptions import AirflowException
 from airflow.settings import LOGGING_LEVEL, LOG_FORMAT, SIMPLE_LOG_FORMAT
 
-BASE_LOG_FOLDER = os.path.expanduser(configuration.get('core',
-                                                    'BASE_LOG_FOLDER'))
+BASE_LOG_FOLDER = os.path.expanduser(
+    configuration.get('core', 'BASE_LOG_FOLDER'))
 
 _log = logging.getLogger(__name__)
 
@@ -42,13 +42,13 @@ class _LoggingController(object):
         if not os.path.exists(BASE_LOG_FOLDER):
             os.makedirs(BASE_LOG_FOLDER)
 
-        self._debug_log_file_location = '%s/debug.log' % BASE_LOG_FOLDER
+        self._debug_log_file_location = '{}/debug.log'.format(BASE_LOG_FOLDER)
         self._debug_file_log_handler = logging.FileHandler(
             self._debug_log_file_location)
         self._debug_file_log_handler.setFormatter(logging.Formatter(LOG_FORMAT))
         self._debug_file_log_handler.setLevel(logging.DEBUG)
 
-        self._error_log_file_location = '%s/error.log' % BASE_LOG_FOLDER
+        self._error_log_file_location = '{}/error.log'.format(BASE_LOG_FOLDER)
         self._error_file_log_handler = logging.FileHandler(
             self._error_log_file_location)
         self._error_file_log_handler.setFormatter(logging.Formatter(LOG_FORMAT))
@@ -169,7 +169,8 @@ def setup_file_logging(logger,
     handler.setFormatter(formatter)
     handler.setLevel(level)
 
-    _log.debug('Adding logging to {} into file: {}', logger.name, file_path)
+    _log.debug(
+        'Adding logging to {} into file: {}'.format(logger.name, file_path))
 
     logger.addHandler(handler)
 
@@ -182,7 +183,7 @@ def setup_stream_logging(logger, fmt=SIMPLE_LOG_FORMAT, level=LOGGING_LEVEL):
     :param logger: The logger object to add a new StreamHandler to.
     :param fmt: The format to apply to this new handler.
     :param level: The logging level to apply to this new handler
-    :return: The StreanHandler object that has been added to the logger. This
+    :return: The StreamHandler object that has been added to the logger. This
     is returned such that it can later be removed from the logger if required.
     """
     handler = logging.StreamHandler()
