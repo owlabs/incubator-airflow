@@ -309,16 +309,16 @@ class DagFileProcessor(AbstractDagFileProcessor):
                 start_time = time.time()
 
                 _log.info("Started process (PID=%s) to work on %s",
-                             os.getpid(),
-                             file_path)
+                          os.getpid(),
+                          file_path)
                 scheduler_job = SchedulerJob(dag_ids=dag_id_white_list)
                 result = scheduler_job.process_file(file_path,
                                                     pickle_dags)
                 result_queue.put(result)
                 end_time = time.time()
                 _log.info("Processing %s took %.3f seconds",
-                             file_path,
-                             end_time - start_time)
+                          file_path,
+                          end_time - start_time)
             except:
                 # Log exceptions through the logging framework.
                 _log.exception("Got an exception! Propagating...")
