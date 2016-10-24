@@ -299,6 +299,14 @@ class DagFileProcessor(AbstractDagFileProcessor):
             sys.stderr = f
 
             try:
+                # Update the logging configuration to include thread name.
+                # NOTE: this is unpleasant, but mirrors what was being done
+                # before.
+                thread_formatter = logging.Formatter(
+                    settings.LOG_FORMAT_WITH_THREAD_NAME)
+                for handler in logging.getLogger('airflow').handlers:
+                    handler.setFormatter(thread_formatter)
+
                 # Re-configure the ORM engine as there are issues with multiple processes
                 settings.configure_orm()
 
