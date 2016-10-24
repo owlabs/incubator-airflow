@@ -411,7 +411,7 @@ class DagFileProcessor(AbstractDagFileProcessor):
             # Get the object from the queue or else join() can hang.
             if not self._result_queue.empty():
                 self._result = self._result_queue.get_nowait()
-                _log.debug("Waiting for %s", self._process)
+            _log.debug("Waiting for %s", self._process)
             self._process.join()
             return True
 
