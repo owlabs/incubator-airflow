@@ -157,7 +157,7 @@ def setup_file_logging(logger,
     returned such that it can later be removed from the logger if required.
     """
     # If the passed filename begins with a / it will be interpreted as an
-    # absolute path by os.path.join, so cut off any leading backslash.
+    # absolute path by os.path.join, so cut off any leading forward slash.
     if filename[0] == "/":
         filename = filename[1:]
     file_path = os.path.join(BASE_LOG_FOLDER, filename)
