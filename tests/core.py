@@ -30,6 +30,7 @@ from time import sleep
 import warnings
 
 from dateutil.relativedelta import relativedelta
+import sqlalchemy
 
 from airflow import configuration
 from airflow.executors import SequentialExecutor, LocalExecutor
@@ -48,6 +49,7 @@ from airflow.operators.http_operator import SimpleHttpOperator
 from airflow.operators import sensors
 from airflow.hooks.base_hook import BaseHook
 from airflow.hooks.sqlite_hook import SqliteHook
+from airflow.hooks.postgres_hook import PostgresHook
 from airflow.bin import cli
 from airflow.www import app as application
 from airflow.settings import Session
@@ -595,10 +597,21 @@ class CoreTest(unittest.TestCase):
         job = jobs.LocalTaskJob(task_instance=ti, ignore_ti_state=True)
         job.run()
 
+    @mock.patch('airflow.utils.dag_processing.datetime', FakeDatetime)
     def test_scheduler_job(self):
+        FakeDatetime.now = classmethod(lambda cls: datetime(2016, 1, 1))
         job = jobs.SchedulerJob(dag_id='example_bash_operator',
                                 **self.default_scheduler_args)
         job.run()
+        log_base_directory = configuration.conf.get("scheduler",
+            "child_process_log_directory")
+        latest_log_directory_path = os.path.join(log_base_directory, "latest")
+        # verify that the symlink to the latest logs exists
+        assert os.path.islink(latest_log_directory_path)
+
+        # verify that the symlink points to the correct log directory
+        log_directory = os.path.join(log_base_directory, "2016-01-01")
+        self.assertEqual(os.readlink(latest_log_directory_path), log_directory)
 
     def test_raw_job(self):
         TI = models.TaskInstance
@@ -1312,6 +1325,7 @@ class WebUiTests(unittest.TestCase):
     def setUp(self):
         configuration.load_test_config()
         configuration.conf.set("webserver", "authenticate", "False")
+        configuration.conf.set("webserver", "expose_config", "True")
         app = application.create_app()
         app.config['TESTING'] = True
         self.app = app.test_client()
@@ -1367,6 +1381,7 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             '/admin/configurationview/')
         assert "Airflow Configuration" in response.data.decode('utf-8')
+        assert "Running Configuration" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/rendered?'
             'task_id=runme_1&dag_id=example_bash_operator&'
@@ -1475,6 +1490,7 @@ class WebUiTests(unittest.TestCase):
         assert "runme_0" in response.data.decode('utf-8')
 
     def tearDown(self):
+        configuration.conf.set("webserver", "expose_config", "False")
         self.dag_bash.clear(start_date=DEFAULT_DATE, end_date=datetime.now())
 
 
@@ -1782,6 +1798,21 @@ class ConnectionTest(unittest.TestCase):
         assert c.password == 'password'
         assert c.port == 5432
         del os.environ['AIRFLOW_CONN_AIRFLOW_DB']
+
+    def test_dbapi_get_uri(self):
+        conn = BaseHook.get_connection(conn_id='test_uri')
+        hook = conn.get_hook()
+        assert hook.get_uri() == 'postgres://username:password@ec2.compute.com:5432/the_database'
+        conn2 = BaseHook.get_connection(conn_id='test_uri_no_creds')
+        hook2 = conn2.get_hook()
+        assert hook2.get_uri() == 'postgres://ec2.compute.com/the_database'
+
+    def test_dbapi_get_sqlalchemy_engine(self):
+        conn = BaseHook.get_connection(conn_id='test_uri')
+        hook = conn.get_hook()
+        engine = hook.get_sqlalchemy_engine()
+        assert isinstance(engine, sqlalchemy.engine.Engine)
+        assert str(engine.url) == 'postgres://username:password@ec2.compute.com:5432/the_database'
 
 
 class WebHDFSHookTest(unittest.TestCase):
