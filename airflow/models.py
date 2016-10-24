@@ -240,7 +240,7 @@ class DagBag(BaseDagBag, LoggingMixin):
                 return found_dags
 
         except Exception as e:
-            logger.exception(e)
+            self.logger.exception(e)
             return found_dags
 
         mods = []
