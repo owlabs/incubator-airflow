@@ -57,6 +57,7 @@ from sqlalchemy.orm import exc
 
 DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
 
+_log = logging.getLogger(__name__)
 
 def sigint_handler(sig, frame):
     sys.exit(0)
@@ -78,32 +79,6 @@ def sigquit_handler(sig, frame):
             if line:
                 code.append("  {}".format(line.strip()))
     print("\n".join(code))
-
-
-def setup_file_logging(filename, fmt=settings.SIMPLE_LOG_FORMAT):
-    handler = logging.FileHandler(filename)
-    formatter = logging.Formatter(fmt)
-    handler.setFormatter(formatter)
-    handler.setLevel(settings.LOGGING_LEVEL)
-
-    root = logging.getLogger()
-    root.addHandler(handler)
-
-    return handler
-
-
-def setup_stream_logging(
-    fmt=settings.SIMPLE_LOG_FORMAT, level=settings.LOGGING_LEVEL
-):
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(fmt)
-    handler.setFormatter(formatter)
-    handler.setLevel(level)
-
-    root = logging.getLogger()
-    root.addHandler(handler)
-
-    return handler
 
 
 def setup_locations(process, pid=None, stdout=None, stderr=None, log=None):
@@ -139,7 +114,7 @@ def get_dag(args):
 
 
 def backfill(args, dag=None):
-    setup_stream_logging()
+    logging_utils.logging_controller.enable_console_log()
     dag = dag or get_dag(args)
 
     if not args.start_date and not args.end_date:
@@ -179,7 +154,7 @@ def trigger_dag(args):
     dag = get_dag(args)
 
     if not dag:
-        logging.error("Cannot find dag {}".format(args.dag_id))
+        _log.error("Cannot find dag {}".format(args.dag_id))
         sys.exit(1)
 
     execution_date = datetime.now()
@@ -187,7 +162,7 @@ def trigger_dag(args):
 
     dr = DagRun.find(dag_id=args.dag_id, run_id=run_id)
     if dr:
-        logging.error("This run_id {} already exists".format(run_id))
+        _log.error("This run_id {} already exists".format(run_id))
         raise AirflowException()
 
     run_conf = {}
@@ -201,7 +176,7 @@ def trigger_dag(args):
         conf=run_conf,
         external_trigger=True
     )
-    logging.info("Created {}".format(trigger))
+    _log.info("Created {}".format(trigger))
 
 
 def pool(args):
@@ -340,20 +315,21 @@ def run(args, dag=None):
         args.dag_id = dag.dag_id
 
     # Setting up logging
-    log_base = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
-    directory = log_base + "/{args.dag_id}/{args.task_id}".format(args=args)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+    directory = "/{args.dag_id}/{args.task_id}".format(args=args)
     iso = args.execution_date.isoformat()
     filename = "{directory}/{iso}".format(**locals())
 
-    handler = setup_file_logging(filename, settings.LOG_FORMAT)
+    # Add handler to root logger to affect the entire process, otherwise
+    # the new handler is not applied to the logging outside of this file.
+    handler = logging_utils.setup_file_logging(logging.getLogger('airflow'),
+                                               filename,
+                                               settings.LOG_FORMAT)
 
     if not args.pickle and not dag:
         dag = get_dag(args)
     elif not dag:
         session = settings.Session()
-        logging.info('Loading pickle id {args.pickle}'.format(**locals()))
+        _log.info('Loading pickle id {args.pickle}'.format(**locals()))
         dag_pickle = session.query(
             DagPickle).filter(DagPickle.id == args.pickle).first()
         if not dag_pickle:
@@ -423,7 +399,7 @@ def run(args, dag=None):
     # because we subsequently read from the log to insert into S3 or Google
     # cloud storage.
     handler.flush()
-    logging.root.removeHandler(handler)
+    _log.root.removeHandler(handler)
 
     # store logs remotely
     remote_base = conf.get('core', 'REMOTE_BASE_LOG_FOLDER')
@@ -436,6 +412,12 @@ def run(args, dag=None):
             'update airflow.cfg to ensure future compatibility.',
             DeprecationWarning)
         remote_base = conf.get('core', 'S3_LOG_FOLDER')
+
+    # Add the root path to the filename to get the absolute path. This is now
+    # taken care of inside the setup_file_logging method above, but we need the
+    # absolute path now for the remote logging.
+    log_base = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
+    filename = log_base + directory
 
     if os.path.exists(filename):
         # read log and remove old logs to get just the latest additions
@@ -455,7 +437,7 @@ def run(args, dag=None):
                 append=True)
         # Other
         elif remote_base and remote_base != 'None':
-            logging.error(
+            _log.error(
                 'Unsupported remote log location: {}'.format(remote_base))
 
 
@@ -563,7 +545,7 @@ def render(args):
 
 
 def clear(args):
-    setup_stream_logging()
+    logging_utils.logging_controller.enable_console_log()
     dag = get_dag(args)
 
     if args.task_regex:
@@ -628,7 +610,7 @@ def restart_workers(gunicorn_master_proc, num_workers_expected):
 
     def start_refresh(gunicorn_master_proc):
         batch_size = conf.getint('webserver', 'worker_refresh_batch_size')
-        logging.debug('%s doing a refresh of %s workers',
+        _log.debug('%s doing a refresh of %s workers',
             state, batch_size)
         sys.stdout.flush()
         sys.stderr.flush()
@@ -652,14 +634,14 @@ def restart_workers(gunicorn_master_proc, num_workers_expected):
 
         # Whenever some workers are not ready, wait until all workers are ready
         if num_ready_workers_running < num_workers_running:
-            logging.debug('%s some workers are starting up, waiting...', state)
+            _log.debug('%s some workers are starting up, waiting...', state)
             sys.stdout.flush()
             time.sleep(1)
 
         # Kill a worker gracefully by asking gunicorn to reduce number of workers
         elif num_workers_running > num_workers_expected:
             excess = num_workers_running - num_workers_expected
-            logging.debug('%s killing %s workers', state, excess)
+            _log.debug('%s killing %s workers', state, excess)
 
             for _ in range(excess):
                 gunicorn_master_proc.send_signal(signal.SIGTTOU)
@@ -670,7 +652,7 @@ def restart_workers(gunicorn_master_proc, num_workers_expected):
         # Start a new worker by asking gunicorn to increase number of workers
         elif num_workers_running == num_workers_expected:
             refresh_interval = conf.getint('webserver', 'worker_refresh_interval')
-            logging.debug(
+            _log.debug(
                 '%s sleeping for %ss starting doing a refresh...',
                 state, refresh_interval
             )
@@ -679,7 +661,7 @@ def restart_workers(gunicorn_master_proc, num_workers_expected):
 
         else:
             # num_ready_workers_running == num_workers_running < num_workers_expected
-            logging.error((
+            _log.error((
                 "%s some workers seem to have died and gunicorn"
                 "did not restart them as expected"
             ), state)
@@ -778,7 +760,10 @@ def scheduler(args):
 
     if args.daemon:
         pid, stdout, stderr, log_file = setup_locations("scheduler", args.pid, args.stdout, args.stderr, args.log_file)
-        handler = setup_file_logging(log_file)
+        handler = logging_utils.setup_file_logging(
+            logging.getLogger('airflow'),
+            log_file,
+            settings.LOG_FORMAT)
         stdout = open(stdout, 'w+')
         stderr = open(stderr, 'w+')
 
@@ -837,7 +822,10 @@ def worker(args):
 
     if args.daemon:
         pid, stdout, stderr, log_file = setup_locations("worker", args.pid, args.stdout, args.stderr, args.log_file)
-        handler = setup_file_logging(log_file)
+        handler = logging_utils.setup_file_logging(
+            logging.getLogger('airflow'),
+            log_file,
+            settings.LOG_FORMAT)
         stdout = open(stdout, 'w+')
         stderr = open(stderr, 'w+')
 
@@ -875,7 +863,7 @@ def resetdb(args):
     if args.yes or input(
             "This will drop existing tables if they exist. "
             "Proceed? (y/n)").upper() == "Y":
-        setup_stream_logging()
+        logging_utils.logging_controller.enable_console_log()
         db_utils.resetdb()
     else:
         print("Bail.")
@@ -922,7 +910,7 @@ def connections(args):
                               Connection.is_encrypted,
                               Connection.is_extra_encrypted,
                               Connection.extra).all()
-        conns = [map(reprlib.repr, conn) for conn in conns] 
+        conns = [map(reprlib.repr, conn) for conn in conns]
         print(tabulate(conns, ['Conn Id', 'Conn Type', 'Host', 'Port',
                                'Is Encrypted', 'Is Extra Encrypted', 'Extra'],
                        tablefmt="fancy_grid"))
