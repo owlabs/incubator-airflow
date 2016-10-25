@@ -300,8 +300,6 @@ class DagFileProcessor(AbstractDagFileProcessor):
 
             try:
                 # Update the logging configuration to include thread name.
-                # NOTE: this is unpleasant, but mirrors what was being done
-                # before.
                 thread_formatter = logging.Formatter(
                     settings.LOG_FORMAT_WITH_THREAD_NAME)
                 for handler in logging.getLogger('airflow').handlers:
