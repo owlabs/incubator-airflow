@@ -66,7 +66,6 @@ class LoggingMixinTest(unittest.TestCase):
 
         log_class = MyLoggingClass()
         self.assertEqual(log_class.logger.name, 'tests.utils.MyLoggingClass')
-        self.assertEqual(log_class.logger.level, settings.LOGGING_LEVEL)
 
 
 class OperatorResourcesTest(unittest.TestCase):

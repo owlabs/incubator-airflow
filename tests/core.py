@@ -950,15 +950,6 @@ class CliTests(unittest.TestCase):
         """Ensures the NullHandler from `_add_null_handler` is still around."""
         self.assertIn(self.null_handler, logging.getLogger().handlers)
 
-    def _assert_stream_handler(self):
-        """Ensures a stream handler (from `setup_stream_logging`) has been
-        added."""
-        for handler in logging.getLogger().handlers:
-            if isinstance(handler, logging.StreamHandler):
-                return
-
-        self.fail('no StreamHandler found')
-
     def test_cli_list_dags(self):
         args = self.parser.parse_args(['list_dags', '--report'])
         cli.list_dags(args)
@@ -1215,7 +1206,6 @@ class CliTests(unittest.TestCase):
         cli.clear(args)
 
         self._assert_null_handler()
-        self._assert_stream_handler()
 
     def test_backfill(self):
         self._add_null_handler()
@@ -1237,7 +1227,6 @@ class CliTests(unittest.TestCase):
             '-s', DEFAULT_DATE.isoformat()]))
 
         self._assert_null_handler()
-        self._assert_stream_handler()
 
     def test_process_subdir_path_with_placeholder(self):
         assert cli.process_subdir('DAGS_FOLDER/abc') == os.path.join(configuration.get_dags_folder(), 'abc')
