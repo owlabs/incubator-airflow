@@ -21,6 +21,7 @@ import logging
 import unittest
 from io import StringIO
 from tempfile import NamedTemporaryFile
+import os
 
 import airflow.utils.logging as logging_utils
 from airflow import configuration
@@ -78,12 +79,16 @@ class LoggingHandlerSetupTests(unittest.TestCase):
         self.assertIn("test message", stream.getvalue())
 
     def test_setup_file_logging(self):
-        with NamedTemporaryFile('w+t') as temp_file:
+        filename = 'setup_file_logging_test.log'
+        base_log_folder = os.path.expanduser(
+            configuration.get('core', 'BASE_LOG_FOLDER'))
+        file_path = os.path.join(base_log_folder, filename)
+        with open(file_path, "r") as log_file:
             self.handler = logging_utils.setup_file_logging(self.logger,
-                                                            temp_file.name)
+                                                            filename)
             self.logger.info("test message")
-            temp_file.seek(0)
-            log_message = temp_file.read()
+            log_file.seek(0)
+            log_message = log_file.read()
             self.assertIn("test message", log_message)
 
 
