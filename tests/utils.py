@@ -83,10 +83,10 @@ class LoggingHandlerSetupTests(unittest.TestCase):
         base_log_folder = os.path.expanduser(
             configuration.get('core', 'BASE_LOG_FOLDER'))
         file_path = os.path.join(base_log_folder, filename)
+        self.handler = logging_utils.setup_file_logging(self.logger,
+                                                        filename)
+        self.logger.info("test message")
         with open(file_path, "r") as log_file:
-            self.handler = logging_utils.setup_file_logging(self.logger,
-                                                            filename)
-            self.logger.info("test message")
             log_file.seek(0)
             log_message = log_file.read()
             self.assertIn("test message", log_message)
