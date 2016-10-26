@@ -20,6 +20,7 @@ import unittest
 import logging
 import multiprocessing
 import mock
+import re
 import tempfile
 from datetime import datetime, time, timedelta
 from email.mime.multipart import MIMEMultipart
