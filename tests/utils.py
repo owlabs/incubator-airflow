@@ -19,8 +19,10 @@ from __future__ import unicode_literals
 
 import logging
 import unittest
+from io import StringIO
+from tempfile import NamedTemporaryFile
 
-import airflow.utils.logging
+import airflow.utils.logging as logging_utils
 from airflow import configuration
 from airflow import settings
 from airflow.exceptions import AirflowException
@@ -36,7 +38,7 @@ class LogUtilsTest(unittest.TestCase):
         logging.info(
             'About to create a GCSLog object without a connection. This will '
             'log an error but testing will proceed.')
-        glog = airflow.utils.logging.GCSLog()
+        glog = logging_utils.GCSLog()
 
         self.assertEqual(
             glog.parse_gcs_url('gs://bucket/path/to/blob'),
@@ -59,9 +61,35 @@ class LogUtilsTest(unittest.TestCase):
             ('bucket', ''))
 
 
+class LoggingHandlerSetupTests(unittest.TestCase):
+    def setUp(self):
+        self.logger = logging.getLogger('airflow.test')
+
+    def tearDown(self):
+        if self.handler:
+            self.logger.removeHandler(self.handler)
+
+    def test_setup_stream_logging(self):
+        # Make sure our handler is getting messages.
+        self.handler = logging_utils.setup_stream_logging(self.logger)
+        stream = StringIO()
+        self.handler.stream = stream  # Override stderr default stream.
+        self.logger.info("test message")
+        self.assertIn("test message", stream.getvalue())
+
+    def test_setup_file_logging(self):
+        with NamedTemporaryFile('w+t') as temp_file:
+            self.handler = logging_utils.setup_file_logging(self.logger,
+                                                            temp_file.name)
+            self.logger.info("test message")
+            temp_file.seek(0)
+            log_message = temp_file.read()
+            self.assertIn("test message", log_message)
+
+
 class LoggingMixinTest(unittest.TestCase):
     def test(self):
-        class MyLoggingClass(airflow.utils.logging.LoggingMixin):
+        class MyLoggingClass(logging_utils.LoggingMixin):
             pass
 
         log_class = MyLoggingClass()
