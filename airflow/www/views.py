@@ -2161,6 +2161,27 @@ class VariableView(wwwutils.DataProfilingMixin, AirflowModelView):
             form.val.data = '*' * 8
 
 
+class XComView(wwwutils.LoginMixin, AirflowModelView):
+    verbose_name = "XCom"
+    verbose_name_plural = "XComs"
+    page_size = 20
+
+    form_columns = (
+        'key',
+        'value',
+        'execution_date',
+        'task_id',
+        'dag_id',
+    )
+
+    form_extra_fields = {
+        'value': StringField('Value'),
+    }
+
+    column_filters = ('key', 'timestamp', 'execution_date', 'task_id', 'dag_id')
+    column_searchable_list = ('key', 'timestamp', 'execution_date', 'task_id', 'dag_id')
+
+
 class JobModelView(ModelViewOnly):
     verbose_name_plural = "jobs"
     verbose_name = "job"
@@ -2511,10 +2532,15 @@ class ConfigurationView(wwwutils.SuperUserMixin, BaseView):
         if conf.getboolean("webserver", "expose_config"):
             with open(conf.AIRFLOW_CONFIG, 'r') as f:
                 config = f.read()
+            table = [(section, key, value, source)
+                     for section, parameters in conf.as_dict(True, True).items()
+                     for key, (value, source) in parameters.items()]
+
         else:
             config = (
                 "# You Airflow administrator chose not to expose the "
                 "configuration, most likely for security reasons.")
+            table = None
         if raw:
             return Response(
                 response=config,
@@ -2527,9 +2553,10 @@ class ConfigurationView(wwwutils.SuperUserMixin, BaseView):
                 HtmlFormatter(noclasses=True))
             )
             return self.render(
-                'airflow/code.html',
+                'airflow/config.html',
                 pre_subtitle=settings.HEADER + "  v" + airflow.__version__,
-                code_html=code_html, title=title, subtitle=subtitle)
+                code_html=code_html, title=title, subtitle=subtitle,
+                table=table)
 
 
 class DagModelView(wwwutils.SuperUserMixin, ModelView):

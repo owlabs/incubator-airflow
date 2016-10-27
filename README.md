@@ -87,6 +87,7 @@ Currently **officially** using Airflow:
 1. [Apigee](https://apigee.com) [[@btallman](https://github.com/btallman)]
 1. [Auth0](https://auth0.com) [[@sicarul](https://github.com/sicarul)]
 1. [Bellhops](https://github.com/bellhops)
+1. [BlaBlaCar](https://www.blablacar.com) [[@puckel](https://github.com/puckel) & [@wmorin](https://github.com/wmorin)]
 1. [Bloc](https://www.bloc.io) [[@dpaola2](https://github.com/dpaola2)]
 1. BlueApron [[@jasonjho](https://github.com/jasonjho) & [@matthewdavidhauser](https://github.com/matthewdavidhauser)]
 1. [Blue Yonder](http://www.blue-yonder.com) [[@blue-yonder](https://github.com/blue-yonder)]
@@ -124,6 +125,7 @@ Currently **officially** using Airflow:
 1. [Sidecar](https://hello.getsidecar.com/) [[@getsidecar](https://github.com/getsidecar)]
 1. [SimilarWeb](https://www.similarweb.com/) [[@similarweb](https://github.com/similarweb)]
 1. [SmartNews](https://www.smartnews.com/) [[@takus](https://github.com/takus)]
+1. [Spotify](https://github.com/spotify) [[@znichols](https://github.com/znichols)]
 1. Stripe [[@jbalogh](https://github.com/jbalogh)]
 1. [Thumbtack](https://www.thumbtack.com/) [[@natekupp](https://github.com/natekupp)]
 1. [T2 Systems](http://t2systems.com) [[@unclaimedpants](https://github.com/unclaimedpants)]
