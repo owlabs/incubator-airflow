@@ -20,12 +20,11 @@ import unittest
 import logging
 import multiprocessing
 import mock
+import re
 import tempfile
 from datetime import datetime, time, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
-from io import StringIO
-from tempfile import NamedTemporaryFile
 from time import sleep
 import warnings
 
@@ -55,9 +54,7 @@ from airflow.www import app as application
 from airflow.settings import Session
 from airflow.utils.state import State
 from airflow.utils.dates import round_time
-from airflow.utils.logging import LoggingMixin,\
-                                  setup_stream_logging,\
-                                  setup_file_logging
+from airflow.utils.logging import LoggingMixin
 from lxml import html
 from airflow.exceptions import AirflowException
 from airflow.configuration import AirflowConfigException
@@ -906,30 +903,6 @@ class CoreTest(unittest.TestCase):
         session.close()
 
 
-class CliLoggingTests(unittest.TestCase):
-    def tearDown(self):
-        if self.handler:
-            logging.getLogger().removeHandler(self.handler)
-
-    def test_setup_stream_logging(self):
-        # Make sure our handler is getting messages.
-        self.handler = setup_stream_logging()
-        stream = StringIO()
-        self.handler.stream = stream  # Override stderr default stream.
-        logger = logging.getLogger()
-        logger.info("test message")
-        self.assertIn("test message", stream.getvalue())
-
-    def test_setup_file_logging(self):
-        with NamedTemporaryFile('w+t') as tempfile:
-            self.handler = setup_file_logging(tempfile.name)
-            logger = logging.getLogger()
-            logger.info("test message")
-            tempfile.seek(0)
-            log_message = tempfile.read()
-            self.assertIn("test message", log_message)
-
-
 class CliTests(unittest.TestCase):
     def setUp(self):
         configuration.load_test_config()
@@ -949,15 +922,6 @@ class CliTests(unittest.TestCase):
     def _assert_null_handler(self):
         """Ensures the NullHandler from `_add_null_handler` is still around."""
         self.assertIn(self.null_handler, logging.getLogger().handlers)
-
-    def _assert_stream_handler(self):
-        """Ensures a stream handler (from `setup_stream_logging`) has been
-        added."""
-        for handler in logging.getLogger().handlers:
-            if isinstance(handler, logging.StreamHandler):
-                return
-
-        self.fail('no StreamHandler found')
 
     def test_cli_list_dags(self):
         args = self.parser.parse_args(['list_dags', '--report'])
@@ -1215,7 +1179,6 @@ class CliTests(unittest.TestCase):
         cli.clear(args)
 
         self._assert_null_handler()
-        self._assert_stream_handler()
 
     def test_backfill(self):
         self._add_null_handler()
@@ -1237,7 +1200,6 @@ class CliTests(unittest.TestCase):
             '-s', DEFAULT_DATE.isoformat()]))
 
         self._assert_null_handler()
-        self._assert_stream_handler()
 
     def test_process_subdir_path_with_placeholder(self):
         assert cli.process_subdir('DAGS_FOLDER/abc') == os.path.join(configuration.get_dags_folder(), 'abc')
