@@ -586,6 +586,22 @@ class CoreTest(unittest.TestCase):
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
         assert val['success']
 
+    def test_template_non_bool(self):
+        """
+        Test templates can handle objects with no sense of truthiness
+        """
+        class NonBoolObject(object):
+            def __len__(self):
+                return NotImplemented
+            def __bool__(self):
+                return NotImplemented
+
+        t = OperatorSubclass(
+            task_id='test_bad_template_obj',
+            some_templated_field=NonBoolObject(),
+            dag=self.dag)
+        t.resolve_template_files()
+
     def test_import_examples(self):
         self.assertEqual(len(self.dagbag.dags), NUM_EXAMPLE_DAGS)
 
@@ -1416,6 +1432,8 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             "/admin/airflow/paused?"
             "dag_id=example_python_operator&is_paused=false")
+        response = self.app.get("/admin/xcom", follow_redirects=True)
+        assert "Xcoms" in response.data.decode('utf-8')
 
     def test_charts(self):
         session = Session()
