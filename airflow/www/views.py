@@ -1399,7 +1399,8 @@ class Airflow(BaseView):
             task_instances=json.dumps(task_instances, indent=2),
             tasks=json.dumps(tasks, indent=2),
             nodes=json.dumps(nodes, indent=2),
-            edges=json.dumps(edges, indent=2),)
+            edges=json.dumps(edges, indent=2),
+            refresh_rate=10000)
 
     @expose('/duration')
     @login_required
