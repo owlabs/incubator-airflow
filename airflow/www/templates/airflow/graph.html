@@ -366,7 +366,7 @@
         }
 
     {% if refresh_rate %}
-    window.setInterval(refreshGraph(), {{ refresh_rate }})
+    window.setInterval(refreshGraph, {{ refresh_rate }})
     {% else %}
     d3.select("#refresh_button").on("click", refreshGraph());
     {% endif %}
