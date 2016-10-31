@@ -1380,7 +1380,7 @@ class Airflow(BaseView):
         session.close()
         doc_md = markdown.markdown(dag.doc_md) if hasattr(dag, 'doc_md') else ''
 
-        refresh_rate = conf.get('webserver', 'graph_refresh_rate')
+        refresh_rate = int(conf.get('webserver', 'graph_refresh_rate'))
         if not refresh_rate:
             refresh_rate = 0
 
