@@ -1380,6 +1380,10 @@ class Airflow(BaseView):
         session.close()
         doc_md = markdown.markdown(dag.doc_md) if hasattr(dag, 'doc_md') else ''
 
+        refresh_rate = conf.get('webserver', 'graph_refresh_rate')
+        if not refresh_rate:
+            refresh_rate = 0
+
         return self.render(
             'airflow/graph.html',
             dag=dag,
@@ -1400,7 +1404,7 @@ class Airflow(BaseView):
             tasks=json.dumps(tasks, indent=2),
             nodes=json.dumps(nodes, indent=2),
             edges=json.dumps(edges, indent=2),
-            refresh_rate=10000)
+            refresh_rate=refresh_rate)
 
     @expose('/duration')
     @login_required

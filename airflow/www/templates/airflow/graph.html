@@ -76,7 +76,7 @@
         <span id="error_msg">Oops.</span>
 </div>
 <hr style="margin-bottom: 0px;"/>
-{% if not refresh_rate %}
+{% if not refresh_rate > 0 %}
 <button class="btn btn-default pull-right" id="refresh_button">
     <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span>
 </button>
@@ -365,7 +365,7 @@
             });
         }
 
-    {% if refresh_rate %}
+    {% if refresh_rate > 0 %}
     window.setInterval(refreshGraph, {{ refresh_rate }})
     {% else %}
     d3.select("#refresh_button").on("click", refreshGraph());
