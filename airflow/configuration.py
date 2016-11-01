@@ -252,6 +252,11 @@ dag_orientation = LR
 # privacy.
 demo_mode = False
 
+# Rate at which to automatically refresh the task states in the graph view in
+# milliseconds. If not set or set to 0, the graph will require refreshing
+# manually. Otherwise the manual refresh button will not be displayed.
+graph_refresh_rate = 0
+
 [email]
 email_backend = airflow.utils.email.send_email_smtp
 
