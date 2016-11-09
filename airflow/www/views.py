@@ -75,6 +75,7 @@ from airflow.utils.helpers import alchemy_to_dict
 from airflow.utils import logging as log_utils
 from airflow.www import utils as wwwutils
 from airflow.www.forms import DateTimeForm, DateTimeWithNumRunsForm
+from airflow.configuration import AirflowConfigException
 
 QUERY_LIMIT = 100000
 CHART_LIMIT = 200000
@@ -511,6 +512,7 @@ class Airflow(BaseView):
 
         LastDagRun = (
             session.query(DagRun.dag_id, sqla.func.max(DagRun.execution_date).label('execution_date'))
+            .filter(DagRun.state != State.RUNNING)
             .group_by(DagRun.dag_id)
             .subquery('last_dag_run')
         )
@@ -758,7 +760,13 @@ class Airflow(BaseView):
                 log += "*** Fetching here: {url}\n".format(**locals())
                 try:
                     import requests
-                    response = requests.get(url)
+                    timeout = None  # No timeout
+                    try:
+                        timeout = conf.getint('webserver', 'log_fetch_timeout_sec')
+                    except (AirflowConfigException, ValueError):
+                        pass
+
+                    response = requests.get(url, timeout=timeout)
                     response.raise_for_status()
                     log += '\n' + response.text
                     log_loaded = True

@@ -32,15 +32,14 @@ from builtins import str
 from collections import OrderedDict
 from configparser import ConfigParser
 
+from .exceptions import AirflowConfigException
+
 # show Airflow's deprecation warnings
 warnings.filterwarnings(
     action='default', category=DeprecationWarning, module='airflow')
 warnings.filterwarnings(
     action='default', category=PendingDeprecationWarning, module='airflow')
 
-
-class AirflowConfigException(Exception):
-    pass
 
 try:
     from cryptography.fernet import Fernet
@@ -257,6 +256,11 @@ demo_mode = False
 # manually. Otherwise the manual refresh button will not be displayed.
 graph_refresh_rate = 0
 
+# The amount of time (in secs) webserver will wait for initial handshake
+# while fetching logs from other worker machine
+log_fetch_timeout_sec = 5
+
+
 [email]
 email_backend = airflow.utils.email.send_email_smtp
 
@@ -433,6 +437,7 @@ base_url = http://localhost:8080
 web_server_host = 0.0.0.0
 web_server_port = 8080
 dag_orientation = LR
+log_fetch_timeout_sec = 5
 
 [email]
 email_backend = airflow.utils.email.send_email_smtp

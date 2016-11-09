@@ -85,7 +85,9 @@ Currently **officially** using Airflow:
 1. [allegro.pl](http://allegro.tech/) [[@kretes](https://github.com/kretes)]
 1. [AltX](https://www.getaltx.com/about) [[@pedromduarte](https://github.com/pedromduarte)]
 1. [Apigee](https://apigee.com) [[@btallman](https://github.com/btallman)]
+1. [Astronomer](http://www.astronomer.io) [[@schnie](https://github.com/schnie)]
 1. [Auth0](https://auth0.com) [[@sicarul](https://github.com/sicarul)]
+1. [BandwidthX](http://www.bandwidthx.com) [[@dineshdsharma](https://github.com/dineshdsharma)]
 1. [Bellhops](https://github.com/bellhops)
 1. [BlaBlaCar](https://www.blablacar.com) [[@puckel](https://github.com/puckel) & [@wmorin](https://github.com/wmorin)]
 1. [Bloc](https://www.bloc.io) [[@dpaola2](https://github.com/dpaola2)]
@@ -114,6 +116,7 @@ Currently **officially** using Airflow:
 1. [LingoChamp](http://www.liulishuo.com/) [[@haitaoyao](https://github.com/haitaoyao)]
 1. [Lucid](http://luc.id) [[@jbrownlucid](https://github.com/jbrownlucid) & [@kkourtchikov](https://github.com/kkourtchikov)]
 1. [Lyft](https://www.lyft.com/)[[@SaurabhBajaj](https://github.com/SaurabhBajaj)]
+1. [Madrone](http://madroneco.com/) [[@mbreining](https://github.com/mbreining) & [@scotthb](https://github.com/scotthb)]
 1. [Markovian](https://markovian.com/) [[@al-xv](https://github.com/al-xv), [@skogsbaeck](https://github.com/skogsbaeck), [@waltherg](https://github.com/waltherg)]
 1. [MFG Labs](https://github.com/MfgLabs)
 1. [Nerdwallet](https://www.nerdwallet.com)
