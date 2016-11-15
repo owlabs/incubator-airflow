@@ -110,7 +110,7 @@ def create_dag_run_for_date(dag_id, execution_date):
     new_dag_run = dag.create_dagrun(
         run_id=run_id,
         execution_date=execution_date,
-        start_date=datetime.now(),
+        start_date=execution_date,
         state=State.RUNNING,
         external_trigger=True
     )
