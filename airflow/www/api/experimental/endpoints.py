@@ -93,7 +93,7 @@ def create_dag_run(dag_id):
         return response
 
     # Prepare Dag Run properties.
-    execution_date = datetime.now()
+    execution_date = datetime.now().replace(microsecond=0)
     run_id = "api__{:%Y-%m-%dT%H:%M:%S}".format(execution_date)
 
     # Get DAG object and create run.
