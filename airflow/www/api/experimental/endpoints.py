@@ -80,7 +80,7 @@ def task_state(dag_id, task_id, execution_date):
               not k.startswith('_')}
     return jsonify(fields)
 
-@api_experimental.route('/createdagrun/dag/<string:dag_id>/', methods=['POST'])
+@api_experimental.route('/createdagrun/dag/<string:dag_id>/', methods=['POST', 'GET'])
 def create_dag_run(dag_id):
     """
     Creates a new DAG Run and returns a JSON object with the DAG Run's
