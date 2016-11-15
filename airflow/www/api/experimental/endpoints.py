@@ -88,14 +88,14 @@ def create_dag_run(dag_id):
     """
     # Create execution_date and pass through to more specific method.
     execution_date = datetime.now().replace(microsecond=0)
-    return create_dag_run_for_date(dag_id, execution_date)
+    return create_dag_run_for_date(dag_id, execution_date.isoformat())
 
 @api_experimental.route('/createdagrun/dag/<string:dag_id>/executiondate/<string:execution_date>', methods=['POST', 'GET'])
 def create_dag_run_for_date(dag_id, execution_date):
     """
-        Creates a new DAG Run for the specified date and returns a JSON object
-        with the DAG Run's properties.
-        """
+    Creates a new DAG Run for the specified date and returns a JSON object
+    with the DAG Run's properties.
+    """
     # Check DAG exists.
     if dag_id not in dagbag.dags:
         response = jsonify({'error': 'Dag {} not found'.format(dag_id)})
@@ -103,6 +103,7 @@ def create_dag_run_for_date(dag_id, execution_date):
         return response
 
     # Prepare Dag Run properties.
+    execution_date = datetime.strptime(execution_date, ':%Y-%m-%dT%H:%M:%S')
     run_id = "api__{:%Y-%m-%dT%H:%M:%S}".format(execution_date)
 
     # Get DAG object and create run.
