@@ -17,24 +17,33 @@ from airflow import models, settings
 from airflow.www.views import dagbag
 from airflow.utils.state import State
 from datetime import datetime
-
+import logging
 from flask import Blueprint, jsonify
 
 api_experimental = Blueprint('api_experimental', __name__)
-
+_log = logging.getLogger(__name__)
 
 @api_experimental.route('/dags/<string:dag_id>/tasks/<string:task_id>', methods=['GET'])
 def task_info(dag_id, task_id):
     """Returns a JSON with a task's public instance variables. """
+
+    _log.info('TaskInfo API called with parameters: dag_id: {}; '
+              'task_id: {}'.format(dag_id, task_id))
+
+    # Check DAG exists.
     if dag_id not in dagbag.dags:
-        response = jsonify({'error': 'Dag {} not found'.format(dag_id)})
+        error_message = 'Dag {} not found'.format(dag_id)
+        _log.info(error_message)
+        response = jsonify({'error': error_message})
         response.status_code = 404
         return response
 
+    # Check task exists.
     dag = dagbag.dags[dag_id]
     if not dag.has_task(task_id):
-        response = (jsonify({'error': 'Task {} not found in dag {}'
-                    .format(task_id, dag_id)}))
+        error_message = 'Task {} not found in dag {}'.format(task_id, dag_id)
+        _log.info(error_message)
+        response = (jsonify({'error': error_message}))
         response.status_code = 404
         return response
 
@@ -46,17 +55,26 @@ def task_info(dag_id, task_id):
 @api_experimental.route('/taskstate/dag/<string:dag_id>/task/<string:task_id>/executiondate/<string:execution_date>', methods=['GET'])
 def task_state(dag_id, task_id, execution_date):
     """Returns a JSON object with a task instance's properties. """
+
+    _log.info('TaskState API called with parameters: dag_id: {}; '
+              'task_id: {}; execution_date: {}'.format(dag_id,
+                                                       task_id,
+                                                       execution_date))
+
     # Check DAG exists.
     if dag_id not in dagbag.dags:
-        response = jsonify({'error': 'Dag {} not found'.format(dag_id)})
+        error_message = 'Dag {} not found'.format(dag_id)
+        _log.info(error_message)
+        response = jsonify({'error': error_message})
         response.status_code = 404
         return response
 
     # Check task exists.
     dag = dagbag.dags[dag_id]
     if not dag.has_task(task_id):
-        response = (jsonify({'error': 'Task {} not found in dag {}'
-                    .format(task_id, dag_id)}))
+        error_message = 'Task {} not found in dag {}'.format(task_id, dag_id)
+        _log.info(error_message)
+        response = (jsonify({'error': error_message}))
         response.status_code = 404
         return response
 
@@ -70,8 +88,10 @@ def task_state(dag_id, task_id, execution_date):
 
     # Error if task instance not found.
     if not task_instance:
-        response = (jsonify({'error': 'Execution Date {} not found for dag {}'
-                    .format(execution_date, dag_id)}))
+        error_message = 'Execution Date {} not found for dag {}'.format(
+            execution_date, dag_id)
+        _log.info(error_message)
+        response = (jsonify({'error': error_message}))
         response.status_code = 404
         return response
 
@@ -87,6 +107,10 @@ def create_dag_run(dag_id):
     Creates a new DAG Run and returns a JSON object with the DAG Run's
     properties.
     """
+
+    _log.info('CreateDAGRun API called with parameters: dag_id: {}'.format(
+        dag_id))
+
     # Create execution_date and pass through to more specific method.
     execution_date = datetime.now().replace(microsecond=0)
     return create_dag_run_for_date(dag_id, execution_date.isoformat())
@@ -98,9 +122,15 @@ def create_dag_run_for_date(dag_id, execution_date):
     Creates a new DAG Run for the specified date and returns a JSON object
     with the DAG Run's properties.
     """
+
+    _log.info('CreateDAGRun API called with parameters: dag_id: {}; '
+              'execution_date: {}'.format(dag_id, execution_date))
+
     # Check DAG exists.
     if dag_id not in dagbag.dags:
-        response = jsonify({'error': 'Dag {} not found'.format(dag_id)})
+        error_message = 'Dag {} not found'.format(dag_id)
+        _log.info(error_message)
+        response = jsonify({'error': error_message})
         response.status_code = 404
         return response
 
@@ -108,15 +138,14 @@ def create_dag_run_for_date(dag_id, execution_date):
     try:
         execution_date = datetime.strptime(execution_date, '%Y-%m-%dT%H:%M:%S')
     except ValueError:
-        response = jsonify(
-            {"error":
-             "Given execution date, '{}', could not be identified as a date"
-             .format(execution_date)}
-        )
+        error_message = ('Given execution date, {}, could not be identified '
+                         'as a date'.format(execution_date))
+        _log.info(error_message)
+        response = jsonify({'error': error_message})
         response.status_code = 400
         return response
 
-    run_id = "api__{:%Y-%m-%dT%H:%M:%S}".format(execution_date)
+    run_id = 'api__{:%Y-%m-%dT%H:%M:%S}'.format(execution_date)
 
     # Get DAG object and create run.
     dag = dagbag.dags[dag_id]
@@ -141,30 +170,39 @@ def write_to_xcom(dag_id, task_id, execution_date, key, value):
     given. This will update the entry if it already exists, otherwise it will
     create a new entry.
     """
+
+    _log.info('WriteXCom API called with parameters: dag_id: {}; task_id: {}; '
+              'execution_date: {}; key: {}; value: {}'.format(dag_id,
+                                                              task_id,
+                                                              execution_date,
+                                                              key,
+                                                              value))
+
     # Check DAG exists.
     if dag_id not in dagbag.dags:
-        response = jsonify({'error': 'Dag {} not found'.format(dag_id)})
+        error_message = 'Dag {} not found'.format(dag_id)
+        _log.info(error_message)
+        response = jsonify({'error': error_message})
         response.status_code = 404
         return response
 
     # Check task exists.
     dag = dagbag.dags[dag_id]
-    if __name__ == '__main__':
-        if not dag.has_task(task_id):
-            response = (jsonify({'error': 'Task {} not found in dag {}'
-                                .format(task_id, dag_id)}))
-            response.status_code = 404
-            return response
+    if not dag.has_task(task_id):
+        error_message = 'Task {} not found in dag {}'.format(task_id, dag_id)
+        _log.info(error_message)
+        response = (jsonify({'error': error_message}))
+        response.status_code = 404
+        return response
 
     # Convert execution_date to a datetime object.
     try:
         execution_date = datetime.strptime(execution_date, '%Y-%m-%dT%H:%M:%S')
     except ValueError:
-        response = jsonify(
-            {"error":
-             "Given execution date, '{}', could not be identified as a date"
-             .format(execution_date)}
-        )
+        error_message = ('Given execution date, {}, could not be identified '
+                         'as a date'.format(execution_date))
+        _log.info(error_message)
+        response = jsonify({'error': error_message})
         response.status_code = 400
         return response
 
@@ -183,6 +221,8 @@ def write_to_xcom(dag_id, task_id, execution_date, key, value):
         dag_id=dag_id,
         execution_date=execution_date
     )
+
+    _log.info(xcom)
 
     # Send new XCom object.
     fields = {k: str(v) for k, v in vars(xcom).items() if
