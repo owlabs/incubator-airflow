@@ -54,7 +54,13 @@ def task_info(dag_id, task_id):
 
 @api_experimental.route('/taskstate/dag/<string:dag_id>/task/<string:task_id>/executiondate/<string:execution_date>', methods=['GET'])
 def task_state(dag_id, task_id, execution_date):
-    """Returns a JSON object with a task instance's properties. """
+    """
+    Returns a JSON object with a task instance's properties. The format for
+    the execution date is expected to be "YYYY-mm-DDTHH:MM:SS", for example:
+    "2016-11-16T11:34:15". The colons ought to be escaped to %3A, as you would
+    expect, within the URL. These are then automatically replaced by Flask
+    before being passed into this method.
+    """
 
     _log.info('TaskState API called with parameters: dag_id: {}; '
               'task_id: {}; execution_date: {}'.format(dag_id,
@@ -120,7 +126,11 @@ def create_dag_run(dag_id):
 def create_dag_run_for_date(dag_id, execution_date):
     """
     Creates a new DAG Run for the specified date and returns a JSON object
-    with the DAG Run's properties.
+    with the DAG Run's properties. The format for the execution date is
+    expected to be "YYYY-mm-DDTHH:MM:SS", for example: "2016-11-16T11:34:15".
+    The colons ought to be escaped to %3A, as you would expect, within the URL.
+    These are then automatically replaced by Flask before being passed into
+    this method.
     """
 
     _log.info('CreateDAGRun API called with parameters: dag_id: {}; '
@@ -168,7 +178,10 @@ def write_to_xcom(dag_id, task_id, execution_date, key, value):
     """
     Writes the given key value pair to the xcom table with the properties
     given. This will update the entry if it already exists, otherwise it will
-    create a new entry.
+    create a new entry. The format for the execution date is expected to be
+    "YYYY-mm-DDTHH:MM:SS", for example: "2016-11-16T11:34:15". The colons ought
+    to be escaped to %3A, as you would expect, within the URL. These are then
+    automatically replaced by Flask before being passed into this method.
     """
 
     _log.info('WriteXCom API called with parameters: dag_id: {}; task_id: {}; '
