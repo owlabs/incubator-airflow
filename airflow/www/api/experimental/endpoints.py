@@ -149,7 +149,8 @@ def create_dag_run_for_date(dag_id, execution_date):
         execution_date = datetime.strptime(execution_date, '%Y-%m-%dT%H:%M:%S')
     except ValueError:
         error_message = ('Given execution date, {}, could not be identified '
-                         'as a date'.format(execution_date))
+                         'as a date. Example date format: 2015-11-16T14:34:15'
+                         .format(execution_date))
         _log.info(error_message)
         response = jsonify({'error': error_message})
         response.status_code = 400
@@ -213,7 +214,8 @@ def write_to_xcom(dag_id, task_id, execution_date, key, value):
         execution_date = datetime.strptime(execution_date, '%Y-%m-%dT%H:%M:%S')
     except ValueError:
         error_message = ('Given execution date, {}, could not be identified '
-                         'as a date'.format(execution_date))
+                         'as a date. Example date format: 2015-11-16T14:34:15'
+                         .format(execution_date))
         _log.info(error_message)
         response = jsonify({'error': error_message})
         response.status_code = 400
