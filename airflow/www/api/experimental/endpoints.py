@@ -80,6 +80,7 @@ def task_state(dag_id, task_id, execution_date):
               not k.startswith('_')}
     return jsonify(fields)
 
+
 @api_experimental.route('/createdagrun/dag/<string:dag_id>/', methods=['POST', 'GET'])
 def create_dag_run(dag_id):
     """
@@ -89,6 +90,7 @@ def create_dag_run(dag_id):
     # Create execution_date and pass through to more specific method.
     execution_date = datetime.now().replace(microsecond=0)
     return create_dag_run_for_date(dag_id, execution_date.isoformat())
+
 
 @api_experimental.route('/createdagrun/dag/<string:dag_id>/executiondate/<string:execution_date>', methods=['POST', 'GET'])
 def create_dag_run_for_date(dag_id, execution_date):
@@ -113,6 +115,7 @@ def create_dag_run_for_date(dag_id, execution_date):
         )
         response.status_code = 400
         return response
+
     run_id = "api__{:%Y-%m-%dT%H:%M:%S}".format(execution_date)
 
     # Get DAG object and create run.
@@ -131,3 +134,45 @@ def create_dag_run_for_date(dag_id, execution_date):
     return jsonify(fields)
 
 
+@api_experimental.route('/writexcom/dag/<string:dag_id>/task/<string:task_id>/executiondate/<string:execution_date>/key/<string:key>/value/<string:value>', methods=['POST', 'GET'])
+def write_to_xcom(dag_id, task_id, execution_date, key, value):
+    """
+    Writes the given key value pair to the xcom table with the properties
+    given. This will update the entry if it already exists, otherwise it will
+    create a new entry.
+    """
+    # Check DAG exists.
+    if dag_id not in dagbag.dags:
+        response = jsonify({'error': 'Dag {} not found'.format(dag_id)})
+        response.status_code = 404
+        return response
+
+    # Check task exists.
+    dag = dagbag.dags[dag_id]
+    if __name__ == '__main__':
+        if not dag.has_task(task_id):
+            response = (jsonify({'error': 'Task {} not found in dag {}'
+                                .format(task_id, dag_id)}))
+            response.status_code = 404
+            return response
+
+    # Convert execution_date to a datetime object.
+    try:
+        execution_date = datetime.strptime(execution_date, ':%Y-%m-%dT%H:%M:%S')
+    except ValueError:
+        response = jsonify(
+            {'error':
+             'Given execution date, "{}", could not be identified as a date'
+             .format(execution_date)}
+        )
+        response.status_code = 400
+        return response
+
+    # Set the XCom object. Duplicate objects are handled and overwritten inside
+    # this method.
+    models.XCom.set(
+        key=key,
+        value=value,
+        task_id=task_id,
+        dag_id=dag_id,
+        execution_date=execution_date)
