@@ -170,12 +170,19 @@ def write_to_xcom(dag_id, task_id, execution_date, key, value):
 
     # Set the XCom object. Duplicate objects are handled and overwritten inside
     # this method.
-    xcom = models.XCom.set(
+    models.XCom.set(
         key=key,
         value=value,
         task_id=task_id,
         dag_id=dag_id,
         execution_date=execution_date)
+
+    xcom = models.XCom.get_one(
+        key=key,
+        task_id=task_id,
+        dag_id=dag_id,
+        execution_date=execution_date
+    )
 
     # Send new XCom object.
     fields = {k: str(v) for k, v in vars(xcom).items() if
