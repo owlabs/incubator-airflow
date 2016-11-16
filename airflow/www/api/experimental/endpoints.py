@@ -106,7 +106,7 @@ def create_dag_run_for_date(dag_id, execution_date):
 
     # Prepare Dag Run properties.
     try:
-        execution_date = datetime.strptime(execution_date, ':%Y-%m-%dT%H:%M:%S')
+        execution_date = datetime.strptime(execution_date, '%Y-%m-%dT%H:%M:%S')
     except ValueError:
         response = jsonify(
             {"error":
@@ -158,7 +158,7 @@ def write_to_xcom(dag_id, task_id, execution_date, key, value):
 
     # Convert execution_date to a datetime object.
     try:
-        execution_date = datetime.strptime(execution_date, ':%Y-%m-%dT%H:%M:%S')
+        execution_date = datetime.strptime(execution_date, '%Y-%m-%dT%H:%M:%S')
     except ValueError:
         response = jsonify(
             {"error":
