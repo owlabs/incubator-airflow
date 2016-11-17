@@ -4000,7 +4000,12 @@ class TaskExclusionType(object):
 
 class TaskExclusion(Base):
     """
-    Description goes here.
+    This class is used to define objects that can be used to specify not to
+    run a given task in a given dag on a variety of execution date conditions.
+    These objects will be stored in the backend database in the task_exclusion
+    table.
+    Static methods are provided for the creation, removal and investigation of
+    these objects.
     """
 
     __tablename__ = "task_exclusion"
