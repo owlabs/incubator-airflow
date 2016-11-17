@@ -3975,3 +3975,274 @@ class ImportError(Base):
     timestamp = Column(DateTime)
     filename = Column(String(1024))
     stacktrace = Column(Text)
+
+
+class TaskExclusionType(object):
+    """
+    This class is used to define the different types of circumstances under
+    which to exclude tasks from execution. It should be used only for
+    interaction with the TaskExclusion class.
+    """
+
+    # SINGLE_DATE exclusion will prevent a task from executing only in the
+    # DagRun with execution_date matching the given datetime.
+    SINGLE_DATE = 'single_date'
+
+    # DATE_RANGE exclusion will prevent a task from executing in any DagRun
+    # with an execution_date that is between the start and end dates of the
+    # exclusion. These boundaries are inclusive.
+    DATE_RANGE = 'date_range'
+
+    # INDEFINITE exclusion will prevent a task from executing in any DagRun
+    # while the exclusion is in place.
+    INDEFINITE = 'indefinite'
+
+
+class TaskExclusion(Base):
+    """
+    Description goes here.
+    """
+
+    __tablename__ = "task_exclusion"
+
+    dag_id = Column(String(ID_LEN), primary_key=True)
+    task_id = Column(String(ID_LEN), primary_key=True)
+    exclusion_type = Column(Integer)
+    exclusion_start_date = Column(DateTime)
+    exclusion_end_date = Column(DateTime)
+    created_by = Column(String(256))
+    created_on = Column(DateTime)
+
+    @classmethod
+    @provide_session
+    def set(
+            cls,
+            dag_id,
+            task_id,
+            exclusion_type,
+            exclusion_start_date,
+            exclusion_end_date,
+            created_by,
+            session=None):
+        """
+        Add a task exclusion to prevent a task running under certain
+        circumstances.
+        :param dag_id: The dag_id of the DAG containing the task to exclude
+         from execution.
+        :param task_id: The task_id of the task to exclude from execution.
+        :param exclusion_type: The type of circumstances to exclude the task
+         from execution under. See the TaskExclusionType class for more detail.
+        :param exclusion_start_date: The execution_date to start excluding on.
+         This will be ignored if the exclusion_type is INDEFINITE.
+        :param exclusion_end_date: The execution_date to stop excluding on.
+         This will be ignored if the exclusion_type is INDEFINITE or
+         SINGLE_DATE.
+        :param created_by: Who is creating this exclusion. Stored with the
+         exclusion record for auditing/debugging purposes.
+        :return: None.
+        """
+
+        session.expunge_all()
+
+        # Validate dag_id
+        dag = session.query(DAG).filter_by(dag_id=dag_id).first()
+        if not dag:
+            raise AirflowException("Dag not found: {}".format(dag_id))
+
+        # Validate task_id
+        if not dag.has_task(task_id):
+            raise AirflowException(
+                "Task not found in {} dag: {}".format(dag_id, task_id)
+            )
+
+        # Set up execution date range correctly
+        if exclusion_type == TaskExclusionType.SINGLE_DATE:
+            if exclusion_start_date:
+                execution_date_end = exclusion_start_date
+            else:
+                raise AirflowException(
+                    "No exclusion_start_date "
+                )
+        elif exclusion_type == TaskExclusionType.DATE_RANGE:
+            if exclusion_start_date > exclusion_end_date:
+                raise AirflowException(
+                    "The exclusion_start_date is after the exclusion_end_date"
+                )
+        elif exclusion_type == TaskExclusionType.INDEFINITE:
+            execution_date_start = None
+            execution_date_end = None
+        else:
+            raise AirflowException(
+                "The exclusion_type, {}, is not recognised."
+                .format(exclusion_type)
+            )
+
+        # remove any duplicate exclusions
+        session.query(cls).filter(
+            cls.dag_id == dag_id,
+            cls.task_id == task_id,
+            cls.exclusion_type == exclusion_type,
+            cls.exclusion_start_date == exclusion_start_date,
+            cls.exclusion_end_date == exclusion_end_date
+        ).delete()
+
+        # insert new exclusion
+        session.add(TaskExclusion(
+            dag_id=dag_id,
+            task_id=task_id,
+            exclusion_type=exclusion_type,
+            exclusion_start_date=exclusion_start_date,
+            exclusion_end_date=exclusion_end_date,
+            created_by=created_by,
+            created_on=datetime.now())
+        )
+
+        session.commit()
+
+    @classmethod
+    @provide_session
+    def remove(
+            cls,
+            dag_id,
+            task_id,
+            exclusion_type,
+            exclusion_start_date,
+            exclusion_end_date,
+            session=None):
+        """
+        Remove a task exclusion that would prevent a task running under certain
+        circumstances.
+        :param dag_id: The dag_id of the DAG containing the task that would be
+         excluded from execution.
+        :param task_id: The task_id of the task that would be excluded from
+         execution.
+        :param exclusion_type: The type of circumstances that the task would be
+         excluded from execution under. See the TaskExclusionType class for
+          more detail.
+        :param exclusion_start_date: The execution_date that the exclusion
+         starts on. This will be ignored if the exclusion_type is INDEFINITE.
+        :param exclusion_end_date: The execution_date that the exclusion ends
+         on. This will be ignored if the exclusion_type is INDEFINITE or
+         SINGLE_DATE.
+        :return: None.
+        """
+
+        session.expunge_all()
+
+        # Validate dag_id
+        dag = session.query(DAG).filter_by(dag_id=dag_id).first()
+        if not dag:
+            raise AirflowException("Dag not found: {}".format(dag_id))
+
+        # Validate task_id
+        if not dag.has_task(task_id):
+            raise AirflowException(
+                "Task not found in {} dag: {}".format(dag_id, task_id)
+            )
+
+        # Set up execution date range correctly
+        if exclusion_type == TaskExclusionType.SINGLE_DATE:
+            if exclusion_start_date:
+                execution_date_end = exclusion_start_date
+            else:
+                raise AirflowException(
+                    "No exclusion_start_date "
+                )
+        elif exclusion_type == TaskExclusionType.DATE_RANGE:
+            if exclusion_start_date > exclusion_end_date:
+                raise AirflowException(
+                    "The exclusion_start_date is after the exclusion_end_date"
+                )
+        elif exclusion_type == TaskExclusionType.INDEFINITE:
+            execution_date_start = None
+            execution_date_end = None
+        else:
+            raise AirflowException(
+                "The exclusion_type, {}, is not recognised."
+                    .format(exclusion_type)
+            )
+
+        # remove any identified exclusion.
+        session.query(cls).filter(
+            cls.dag_id == dag_id,
+            cls.task_id == task_id,
+            cls.exclusion_type == exclusion_type,
+            cls.exclusion_start_date == exclusion_start_date,
+            cls.exclusion_end_date == exclusion_end_date
+        ).delete()
+
+        session.commit()
+
+    @classmethod
+    @provide_session
+    def should_exclude_task(
+            cls,
+            dag_id,
+            task_id,
+            execution_date,
+            session=None):
+        """
+        Identify whether any exclusions exist that apply to the given task in
+        the given DAG for the given execution date.
+        :param dag_id: The dag_id of the DAG containing the task instance to
+         check for exclusions for.
+        :param task_id: The task_id of the task instance to check for
+         exclusions for.
+        :param execution_date: The execution_date of the task instance to check
+         for exclusions for.
+        :return: True if an exclusion exists for the given task instance. False
+         otherwise.
+        """
+
+        session.expunge_all()
+
+        # Validate dag_id.
+        dag = session.query(DAG).filter_by(dag_id=dag_id).first()
+        if not dag:
+            raise AirflowException("Dag not found: {}".format(dag_id))
+
+        # Validate task_id.
+        if not dag.has_task(task_id):
+            raise AirflowException(
+                "Task not found in {} dag: {}".format(dag_id, task_id)
+            )
+
+        # Attempt to identify an INDEFINITE exclusion.
+        exclusion = session.query(cls).filter(
+            cls.dag_id == dag_id,
+            cls.task_id == task_id,
+            cls.exclusion_type == TaskExclusionType.INDEFINITE,
+        ).first()
+
+        # If an exclusion has been found, return True.
+        if exclusion:
+            return True
+
+        # Attempt to identify a SINGLE_DATE exclusion.
+        exclusion = session.query(cls).filter(
+            cls.dag_id == dag_id,
+            cls.task_id == task_id,
+            cls.exclusion_type == TaskExclusionType.SINGLE_DATE,
+            cls.exclusion_start_date == execution_date
+        ).first()
+
+        # If an exclusion has been found, return True.
+        if exclusion:
+            return True
+
+        # Attempt to identify a DATE_RANGE exclusion.
+        exclusion = session.query(cls).filter(
+            cls.dag_id == dag_id,
+            cls.task_id == task_id,
+            cls.exclusion_type == TaskExclusionType.DATE_RANGE,
+            cls.exclusion_start_date <= execution_date,
+            cls.exclusion_end_date >= execution_date
+        ).first()
+
+        # If an exclusion has been found, return True.
+        if exclusion:
+            return True
+
+        # No exclusion has been found, so return False.
+        return False
+
