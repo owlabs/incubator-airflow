@@ -4010,7 +4010,7 @@ class TaskExclusion(Base):
 
     __tablename__ = "task_exclusion"
 
-    id = Column(Integer(), nullable=False)
+    id = Column(Integer(), primary_key=True)
     dag_id = Column(String(ID_LEN), nullable=False)
     task_id = Column(String(ID_LEN), nullable=False)
     exclusion_type = Column(String(32), nullable=False)
