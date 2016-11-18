@@ -42,7 +42,7 @@ from tabulate import tabulate
 from airflow import executors, models, settings
 from airflow import configuration as conf
 from airflow.exceptions import AirflowException
-from airflow.models import DagRun
+from airflow.models import DagRun, TaskExclusion
 from airflow.settings import Stats
 from airflow.ti_deps.dep_context import RUN_DEPS, DepContext
 from airflow.utils.state import State
@@ -836,8 +836,15 @@ class SchedulerJob(BaseJob):
                 if ti.are_dependencies_met(
                         dep_context=DepContext(flag_upstream_failed=True),
                         session=session):
-                    self.logger.debug('Queuing task: {}'.format(ti))
-                    queue.append(ti.key)
+                    if TaskExclusion.should_exclude_task(
+                            dag_id=ti.dag_id,
+                            task_id=ti.task_id,
+                            execution_date=ti.execution_date):
+                        self.logger.debug('Excluding task: {}'.format(ti))
+                        ti.state = State.EXCLUDED
+                    else:
+                        self.logger.debug('Queuing task: {}'.format(ti))
+                        queue.append(ti.key)
 
         session.close()
 
