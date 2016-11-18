@@ -4201,17 +4201,6 @@ class TaskExclusion(Base):
 
         session.expunge_all()
 
-        # Validate dag_id.
-        dag = session.query(DAG).filter_by(dag_id=dag_id).first()
-        if not dag:
-            raise AirflowException("Dag not found: {}".format(dag_id))
-
-        # Validate task_id.
-        if not dag.has_task(task_id):
-            raise AirflowException(
-                "Task not found in {} dag: {}".format(dag_id, task_id)
-            )
-
         # Attempt to identify an INDEFINITE exclusion.
         exclusion = session.query(cls).filter(
             cls.dag_id == dag_id,
