@@ -4010,13 +4010,13 @@ class TaskExclusion(Base):
 
     __tablename__ = "task_exclusion"
 
-    dag_id = Column(String(ID_LEN), primary_key=True)
-    task_id = Column(String(ID_LEN), primary_key=True)
-    exclusion_type = Column(Integer)
-    exclusion_start_date = Column(DateTime)
-    exclusion_end_date = Column(DateTime)
-    created_by = Column(String(256))
-    created_on = Column(DateTime)
+    dag_id = Column(String(ID_LEN), nullable=False)
+    task_id = Column(String(ID_LEN), nullable=False)
+    exclusion_type = Column(String(32), nullable=False)
+    exclusion_start_date = Column(DateTime, nullable=True)
+    exclusion_end_date = Column(DateTime, nullable=True)
+    created_by = Column(String(256), nullable=False)
+    created_on = Column(DateTime, nullable=False)
 
     @classmethod
     @provide_session
