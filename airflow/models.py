@@ -4050,17 +4050,6 @@ class TaskExclusion(Base):
 
         session.expunge_all()
 
-        # Validate dag_id
-        dag = session.query(DAG).filter_by(dag_id=dag_id).first()
-        if not dag:
-            raise AirflowException("Dag not found: {}".format(dag_id))
-
-        # Validate task_id
-        if not dag.has_task(task_id):
-            raise AirflowException(
-                "Task not found in {} dag: {}".format(dag_id, task_id)
-            )
-
         # Set up execution date range correctly
         if exclusion_type == TaskExclusionType.SINGLE_DATE:
             if exclusion_start_date:
@@ -4134,17 +4123,6 @@ class TaskExclusion(Base):
         """
 
         session.expunge_all()
-
-        # Validate dag_id
-        dag = session.query(DAG).filter_by(dag_id=dag_id).first()
-        if not dag:
-            raise AirflowException("Dag not found: {}".format(dag_id))
-
-        # Validate task_id
-        if not dag.has_task(task_id):
-            raise AirflowException(
-                "Task not found in {} dag: {}".format(dag_id, task_id)
-            )
 
         # Set up execution date range correctly
         if exclusion_type == TaskExclusionType.SINGLE_DATE:
