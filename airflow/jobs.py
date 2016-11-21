@@ -841,7 +841,7 @@ class SchedulerJob(BaseJob):
                             task_id=ti.task_id,
                             execution_date=ti.execution_date):
                         self.logger.debug('Excluding task: {}'.format(ti))
-                        ti.state = State.EXCLUDED
+                        ti.set_state(State.EXCLUDED)
                     else:
                         self.logger.debug('Queuing task: {}'.format(ti))
                         queue.append(ti.key)
