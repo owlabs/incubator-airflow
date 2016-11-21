@@ -41,6 +41,9 @@ rect.state {
 rect.null, rect.undefined {
     fill: white;
 }
+rect.excluded {
+    fill: yellow;
+}
 rect.success {
     fill: green;
 }
