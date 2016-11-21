@@ -1188,6 +1188,11 @@ class Airflow(BaseView):
         # Convert execution_date to Datetime object.
         execution_date = dateutil.parser.parse(execution_date)
 
+        # Get current user
+        username = current_user.username
+        if not username:
+            username = 'Username not found.'
+
         if clear:
             TaskExclusion.remove(dag_id,
                                  task_id,
@@ -1206,7 +1211,7 @@ class Airflow(BaseView):
                               exclusion_type,
                               execution_date,
                               execution_date,
-                              current_user.username)
+                              username)
 
             flash("Added task exclusion for task {} in DAG {} for execution "
                   "date {}".format(task_id,
