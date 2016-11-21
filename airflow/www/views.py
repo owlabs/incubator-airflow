@@ -42,7 +42,7 @@ from flask_admin.contrib.sqla import ModelView
 from flask_admin.actions import action
 from flask_admin.babel import lazy_gettext
 from flask_admin.tools import iterdecode
-from flask_login import flash
+from flask_login import flash, current_user
 from flask._compat import PY2
 
 import jinja2
@@ -1205,7 +1205,8 @@ class Airflow(BaseView):
                               task_id,
                               exclusion_type,
                               execution_date,
-                              execution_date)
+                              execution_date,
+                              current_user.username)
 
             flash("Added task exclusion for task {} in DAG {} for execution "
                   "date {}".format(task_id,
