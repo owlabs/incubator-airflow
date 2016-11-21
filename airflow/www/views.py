@@ -1176,7 +1176,7 @@ class Airflow(BaseView):
     @login_required
     @wwwutils.action_logging
     @wwwutils.notify_owner
-    def success(self):
+    def exclude(self):
         # Get values from arguments
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
