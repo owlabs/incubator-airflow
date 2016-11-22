@@ -49,12 +49,12 @@ class TriggerRuleDep(BaseTIDep):
         # Treat EXCLUDED state as SUCCESS state. This must be done here
         # explicitly as we cannot use the state_for_dependencies function
         # within the database query.
+        success_states = [State.EXCLUDED, State.SUCCESS]
         qry = (
             session
             .query(
                 func.coalesce(func.sum(
-                    case([(TI.state == State.SUCCESS
-                           or TI.state == State.EXCLUDED, 1)], else_=0)), 0),
+                    case([(TI.state in success_states, 1)], else_=0)), 0),
                 func.coalesce(func.sum(
                     case([(TI.state == State.SKIPPED, 1)], else_=0)), 0),
                 func.coalesce(func.sum(
