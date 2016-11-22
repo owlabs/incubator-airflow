@@ -46,15 +46,13 @@ class TriggerRuleDep(BaseTIDep):
         # TODO(unknown): this query becomes quite expensive with dags that have many
         # tasks. It should be refactored to let the task report to the dag run and get the
         # aggregates from there.
-        # Treat EXCLUDED state as SUCCESS state. This must be done here
-        # explicitly as we cannot use the state_for_dependencies function
-        # within the database query.
-        success_states = [State.EXCLUDED, State.SUCCESS]
         qry = (
             session
             .query(
                 func.coalesce(func.sum(
-                    case([(TI.state in success_states, 1)], else_=0)), 0),
+                    case([(TI.state == State.SUCCESS, 1)], else_=0)), 0),
+                func.coalesce(func.sum(
+                    case([(TI.state == State.EXCLUDED, 1)], else_=0)), 0),
                 func.coalesce(func.sum(
                     case([(TI.state == State.SKIPPED, 1)], else_=0)), 0),
                 func.coalesce(func.sum(
@@ -73,7 +71,14 @@ class TriggerRuleDep(BaseTIDep):
             )
         )
 
-        successes, skipped, failed, upstream_failed, done = qry.first()
+        successes, excluded, skipped, failed, upstream_failed, done = qry.first()
+
+        # Add excluded tasks into successful tasks as they are equivalent for
+        # dependency purposes. This is done in this way, not using the
+        # state_for_dependents function, due to the constraints of SQLAlchemy
+        # queries.
+        successes = successes + excluded
+
         for dep_status in self._evaluate_trigger_rule(
                 ti=ti,
                 successes=successes,
