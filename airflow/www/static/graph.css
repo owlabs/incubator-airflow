@@ -37,7 +37,7 @@ g.node.queued rect {
 }
 
 g.node.excluded rect {
-    stroke: yellow;
+    stroke: purple;
 }
 
 g.node.running rect{

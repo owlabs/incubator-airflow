@@ -69,7 +69,7 @@ class State(object):
         SKIPPED: 'pink',
         REMOVED: 'lightgrey',
         SCHEDULED: 'white',
-        EXCLUDED: 'yellow',
+        EXCLUDED: 'purple',
     }
 
     @classmethod
