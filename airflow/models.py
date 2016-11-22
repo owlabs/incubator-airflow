@@ -762,6 +762,19 @@ class TaskInstance(Base):
         """ Initialize the attributes that aren't stored in the DB. """
         self.test_mode = False  # can be changed when calling 'run'
 
+    def state_for_dependents(self):
+        """
+        Helper function used to wire in new EXCLUDED state. For identifying
+        whether task dependencies are met the EXCLUDED state should be treated
+        as SUCCESS. This function allows us to encompass this logic in one
+        place.
+        :return: the effective state of the task instance.
+        """
+        if self.state == State.EXCLUDED:
+            return State.SUCCESS
+        else:
+            return self.state
+
     def command(
             self,
             mark_success=False,
@@ -1013,7 +1026,7 @@ class TaskInstance(Base):
             TaskInstance.dag_id == self.dag_id,
             TaskInstance.task_id.in_(task.downstream_task_ids),
             TaskInstance.execution_date == self.execution_date,
-            TaskInstance.state == State.SUCCESS,
+            TaskInstance.state_for_dependents == State.SUCCESS,
         )
         count = ti[0][0]
         return count == len(task.downstream_task_ids)
@@ -1183,7 +1196,7 @@ class TaskInstance(Base):
         self.hostname = socket.getfqdn()
         self.operator = task.__class__.__name__
 
-        if not ignore_all_deps and not ignore_ti_state and self.state == State.SUCCESS:
+        if not ignore_all_deps and not ignore_ti_state and self.state_for_dependents == State.SUCCESS:
             Stats.incr('previously_succeeded', 1, 1)
 
         queue_dep_context = DepContext(

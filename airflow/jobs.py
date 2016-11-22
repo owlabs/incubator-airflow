@@ -1714,7 +1714,7 @@ class BackfillJob(BaseJob):
                                       .format(ti, ti.state))
                     # The task was already marked successful or skipped by a
                     # different Job. Don't rerun it.
-                    if ti.state == State.SUCCESS:
+                    if ti.state_for_dependents == State.SUCCESS:
                         succeeded.add(key)
                         self.logger.debug("Task instance {} succeeded. "
                                           "Don't rerun.".format(ti))
@@ -1812,7 +1812,7 @@ class BackfillJob(BaseJob):
                     elif state == State.SUCCESS:
 
                         # task reports success
-                        if ti.state == State.SUCCESS:
+                        if ti.state_for_dependents == State.SUCCESS:
                             self.logger.info(
                                 'Task instance {} succeeded'.format(ti))
                             succeeded.add(key)

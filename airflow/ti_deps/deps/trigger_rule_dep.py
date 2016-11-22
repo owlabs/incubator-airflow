@@ -50,7 +50,7 @@ class TriggerRuleDep(BaseTIDep):
             session
             .query(
                 func.coalesce(func.sum(
-                    case([(TI.state == State.SUCCESS, 1)], else_=0)), 0),
+                    case([(TI.state_for_dependents == State.SUCCESS, 1)], else_=0)), 0),
                 func.coalesce(func.sum(
                     case([(TI.state == State.SKIPPED, 1)], else_=0)), 0),
                 func.coalesce(func.sum(
