@@ -200,15 +200,6 @@ def write_to_xcom(dag_id, task_id, execution_date, key, value):
         response.status_code = 404
         return response
 
-    # Check task exists.
-    dag = dagbag.dags[dag_id]
-    if not dag.has_task(task_id):
-        error_message = 'Task {} not found in dag {}'.format(task_id, dag_id)
-        _log.info(error_message)
-        response = (jsonify({'error': error_message}))
-        response.status_code = 404
-        return response
-
     # Convert execution_date to a datetime object.
     try:
         execution_date = datetime.strptime(execution_date, '%Y-%m-%dT%H:%M:%S')
