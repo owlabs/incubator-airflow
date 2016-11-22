@@ -46,11 +46,15 @@ class TriggerRuleDep(BaseTIDep):
         # TODO(unknown): this query becomes quite expensive with dags that have many
         # tasks. It should be refactored to let the task report to the dag run and get the
         # aggregates from there.
+        # Treat EXCLUDED state as SUCCESS state. This must be done here
+        # explicitly as we cannot use the state_for_dependencies function
+        # within the database query.
         qry = (
             session
             .query(
                 func.coalesce(func.sum(
-                    case([(TI.state_for_dependents == State.SUCCESS, 1)], else_=0)), 0),
+                    case([(TI.state == State.SUCCESS
+                           or TI.state == State.EXCLUDED, 1)], else_=0)), 0),
                 func.coalesce(func.sum(
                     case([(TI.state == State.SKIPPED, 1)], else_=0)), 0),
                 func.coalesce(func.sum(
@@ -64,7 +68,7 @@ class TriggerRuleDep(BaseTIDep):
                 TI.task_id.in_(ti.task.upstream_task_ids),
                 TI.execution_date == ti.execution_date,
                 TI.state.in_([
-                    State.SUCCESS, State.FAILED,
+                    State.SUCCESS, State.FAILED, State.EXCLUDED,
                     State.UPSTREAM_FAILED, State.SKIPPED]),
             )
         )
