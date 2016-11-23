@@ -1026,7 +1026,7 @@ class TaskInstance(Base):
             TaskInstance.dag_id == self.dag_id,
             TaskInstance.task_id.in_(task.downstream_task_ids),
             TaskInstance.execution_date == self.execution_date,
-            TaskInstance.state_for_dependents == State.SUCCESS,
+            TaskInstance.state_for_dependents() == State.SUCCESS,
         )
         count = ti[0][0]
         return count == len(task.downstream_task_ids)
@@ -1196,7 +1196,7 @@ class TaskInstance(Base):
         self.hostname = socket.getfqdn()
         self.operator = task.__class__.__name__
 
-        if not ignore_all_deps and not ignore_ti_state and self.state_for_dependents == State.SUCCESS:
+        if not ignore_all_deps and not ignore_ti_state and self.state_for_dependents() == State.SUCCESS:
             Stats.incr('previously_succeeded', 1, 1)
 
         queue_dep_context = DepContext(
