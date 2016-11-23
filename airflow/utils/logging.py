@@ -32,7 +32,7 @@ CLEAR_INHERITED_LOGGING_SETTINGS = os.path.expanduser(
     configuration.get('core',
                       'CLEAR_INHERITED_LOGGING_SETTINGS')).upper() or "TRUE"
 LOG_TO_DEBUG_FILE = os.path.expanduser(
-    configuration.get('core', 'LOG_TO_DEBUG_FILE')).upper() or "TRUE"
+    configuration.get('core', 'LOG_TO_DEBUG_FILE')).upper() or "FALSE"
 LOG_TO_ERROR_FILE = os.path.expanduser(
     configuration.get('core', 'LOG_TO_ERROR_FILE')).upper() or "TRUE"
 LOG_TO_CONSOLE = os.path.expanduser(

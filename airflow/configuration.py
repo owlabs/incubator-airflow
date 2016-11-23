@@ -102,7 +102,7 @@ dags_folder = {AIRFLOW_HOME}/dags
 # This path must be absolute
 base_log_folder = {AIRFLOW_HOME}/logs
 clear_inherited_logging_settings = True
-log_to_debug_file = True
+log_to_debug_file = False
 log_to_error_file = True
 log_to_console = True
 
