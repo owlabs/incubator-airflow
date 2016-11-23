@@ -28,6 +28,20 @@ from airflow.settings import LOGGING_LEVEL, LOG_FORMAT, SIMPLE_LOG_FORMAT
 
 BASE_LOG_FOLDER = os.path.expanduser(
     configuration.get('core', 'BASE_LOG_FOLDER'))
+CLEAR_INHERITED_LOGGING_SETTINGS = os.path.expanduser(
+    configuration.get('core',
+                      'CLEAR_INHERITED_LOGGING_SETTINGS')).upper() or "TRUE"
+LOG_TO_DEBUG_FILE = os.path.expanduser(
+    configuration.get('core', 'LOG_TO_DEBUG_FILE')).upper() or "TRUE"
+LOG_TO_ERROR_FILE = os.path.expanduser(
+    configuration.get('core', 'LOG_TO_ERROR_FILE')).upper() or "TRUE"
+LOG_TO_CONSOLE = os.path.expanduser(
+    configuration.get('core', 'LOG_TO_CONSOLE')).upper() or "TRUE"
+
+CLEAR_INHERITED_LOGGING_SETTINGS = CLEAR_INHERITED_LOGGING_SETTINGS == "TRUE"
+LOG_TO_DEBUG_FILE = LOG_TO_DEBUG_FILE == "TRUE"
+LOG_TO_ERROR_FILE = LOG_TO_ERROR_FILE == "TRUE"
+LOG_TO_CONSOLE = LOG_TO_CONSOLE == "TRUE"
 
 _log = logging.getLogger(__name__)
 
@@ -64,20 +78,16 @@ class _LoggingController(object):
         self._logger = logging.root.getChild('airflow')
         self._logger.setLevel(logging.DEBUG)
 
-        # TODO: replace with config setting CLEAR_INHERITED_LOGGING_SETTINGS
-        if True:
+        if CLEAR_INHERITED_LOGGING_SETTINGS:
             self.clear_handlers()
 
-        # TODO: replace with config setting LOG_TO_DEBUG_FILE
-        if True:
+        if LOG_TO_DEBUG_FILE:
             self.enable_debug_file_log()
 
-        # TODO: replace with config setting LOG_TO_ERROR_FILE
-        if True:
+        if LOG_TO_ERROR_FILE:
             self.enable_error_file_log()
 
-        # TODO: replace with config setting LOG_TO_CONSOLE
-        if True:
+        if LOG_TO_CONSOLE:
             self.enable_console_log()
 
     def clear_handlers(self):
