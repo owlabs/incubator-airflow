@@ -764,8 +764,8 @@ class TaskInstance(Base):
 
     def state_for_dependents(self):
         """
-        Helper function used to wire in new EXCLUDED state. For identifying
-        whether task dependencies are met the EXCLUDED state should be treated
+        Helper function used to wire in the EXCLUDED state. For identifying
+        whether task dependencies are met, the EXCLUDED state should be treated
         as SUCCESS. This function allows us to encompass this logic in one
         place.
         :return: the effective state of the task instance.
