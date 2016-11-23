@@ -38,6 +38,7 @@ LOG_TO_ERROR_FILE = os.path.expanduser(
 LOG_TO_CONSOLE = os.path.expanduser(
     configuration.get('core', 'LOG_TO_CONSOLE')).upper() or "TRUE"
 
+# Convert string valued configuration to boolean.
 CLEAR_INHERITED_LOGGING_SETTINGS = CLEAR_INHERITED_LOGGING_SETTINGS == "TRUE"
 LOG_TO_DEBUG_FILE = LOG_TO_DEBUG_FILE == "TRUE"
 LOG_TO_ERROR_FILE = LOG_TO_ERROR_FILE == "TRUE"
