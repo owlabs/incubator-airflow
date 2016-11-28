@@ -83,7 +83,7 @@ def task_info(dag_id, task_id):
     if dag_id not in dagbag.dags:
         error_message = 'Dag {} not found'.format(dag_id)
         _log.info(error_message)
-        response = jsonify({error=error_message})
+        response = jsonify(error=error_message)
         response.status_code = 404
         return response
 
@@ -92,7 +92,7 @@ def task_info(dag_id, task_id):
     if not dag.has_task(task_id):
         error_message = 'Task {} not found in dag {}'.format(task_id, dag_id)
         _log.info(error_message)
-        response = (jsonify({error=error_message}))
+        response = (jsonify(error=error_message))
         response.status_code = 404
         return response
 
