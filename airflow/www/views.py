@@ -61,7 +61,7 @@ from airflow import models
 from airflow import settings
 from airflow.exceptions import AirflowException
 from airflow.settings import Session
-from airflow.models import XCom, TaskExclusion, TaskExclusionType
+from airflow.models import XCom, TaskExclusion, TaskExclusionType, DagRun
 from airflow.ti_deps.dep_context import DepContext, QUEUE_DEPS, SCHEDULER_DEPS
 
 from airflow.models import BaseOperator
@@ -624,23 +624,6 @@ class Airflow(BaseView):
             nukular=ascii_.nukular,
             info=traceback.format_exc()), 500
 
-    @expose('/sandbox')
-    @login_required
-    def sandbox(self):
-        title = "Sandbox Suggested Configuration"
-        cfg_loc = conf.AIRFLOW_CONFIG + '.sandbox'
-        f = open(cfg_loc, 'r')
-        config = f.read()
-        f.close()
-        code_html = Markup(highlight(
-            config,
-            lexers.IniLexer(),  # Lexer call
-            HtmlFormatter(noclasses=True))
-        )
-        return self.render(
-            'airflow/code.html',
-            code_html=code_html, title=title, subtitle=cfg_loc)
-
     @expose('/noaccess')
     def noaccess(self):
         return self.render('airflow/noaccess.html')
@@ -831,13 +814,20 @@ class Airflow(BaseView):
         ti = TI(task=task, execution_date=dttm)
         ti.refresh_from_db()
 
-        attributes = []
+        ti_attrs = []
+        for attr_name in dir(ti):
+            if not attr_name.startswith('_'):
+                attr = getattr(ti, attr_name)
+                if type(attr) != type(self.task):
+                    ti_attrs.append((attr_name, str(attr)))
+
+        task_attrs = []
         for attr_name in dir(task):
             if not attr_name.startswith('_'):
                 attr = getattr(task, attr_name)
                 if type(attr) != type(self.task) and \
                                 attr_name not in attr_renderer:
-                    attributes.append((attr_name, str(attr)))
+                    task_attrs.append((attr_name, str(attr)))
 
         # Color coding the special attributes that are code
         special_attrs_rendered = {}
@@ -867,7 +857,8 @@ class Airflow(BaseView):
         title = "Task Instance Details"
         return self.render(
             'airflow/task.html',
-            attributes=attributes,
+            task_attrs=task_attrs,
+            ti_attrs=ti_attrs,
             failed_dep_reasons=failed_dep_reasons or no_failed_deps_result,
             task_id=task_id,
             execution_date=execution_date,
@@ -969,6 +960,42 @@ class Airflow(BaseView):
         flash(
             "Sent {} to the message queue, "
             "it should start any moment now.".format(ti))
+        return redirect(origin)
+
+    @expose('/trigger')
+    @login_required
+    @wwwutils.action_logging
+    @wwwutils.notify_owner
+    def trigger(self):
+        dag_id = request.args.get('dag_id')
+        origin = request.args.get('origin') or "/admin/"
+        dag = dagbag.get_dag(dag_id)
+
+        if not dag:
+            flash("Cannot find dag {}".format(dag_id))
+            return redirect(origin)
+
+        execution_date = datetime.now()
+        run_id = "manual__{0}".format(execution_date.isoformat())
+
+        dr = DagRun.find(dag_id=dag_id, run_id=run_id)
+        if dr:
+            flash("This run_id {} already exists".format(run_id))
+            return redirect(origin)
+
+        run_conf = {}
+
+        dag.create_dagrun(
+            run_id=run_id,
+            execution_date=execution_date,
+            state=State.RUNNING,
+            conf=run_conf,
+            external_trigger=True
+        )
+
+        flash(
+            "Triggered {}, "
+            "it should start any moment now.".format(dag_id))
         return redirect(origin)
 
     @expose('/clear')
@@ -1261,10 +1288,11 @@ class Airflow(BaseView):
         dag_runs = {
             dr.execution_date: alchemy_to_dict(dr) for dr in dag_runs}
 
+        dates = sorted(list(dag_runs.keys()))
+        max_date = max(dates) if dates else None
+
         tis = dag.get_task_instances(
                 session, start_date=min_date, end_date=base_date)
-        dates = sorted(list({ti.execution_date for ti in tis}))
-        max_date = max([ti.execution_date for ti in tis]) if dates else None
         task_instances = {}
         for ti in tis:
             tid = alchemy_to_dict(ti)
@@ -1747,13 +1775,14 @@ class Airflow(BaseView):
 
         tasks = []
         for ti in tis:
+            end_date = ti.end_date if ti.end_date else datetime.now()
             tasks.append({
                 'startDate': wwwutils.epoch(ti.start_date),
-                'endDate': wwwutils.epoch(ti.end_date or datetime.now()),
+                'endDate': wwwutils.epoch(end_date),
                 'isoStart': ti.start_date.isoformat()[:-4],
-                'isoEnd': ti.end_date.isoformat()[:-4],
+                'isoEnd': end_date.isoformat()[:-4],
                 'taskName': ti.task_id,
-                'duration': "{}".format(ti.end_date - ti.start_date)[:-4],
+                'duration': "{}".format(end_date - ti.start_date)[:-4],
                 'status': ti.state,
                 'executionDate': ti.execution_date.isoformat(),
             })
@@ -1847,8 +1876,19 @@ class HomeView(AdminIndexView):
         do_filter = FILTER_BY_OWNER and (not current_user.is_superuser())
         owner_mode = conf.get('webserver', 'OWNER_MODE').strip().lower()
 
-        # read orm_dags from the db
+        hide_paused_dags_by_default = conf.getboolean('webserver',
+                                                      'hide_paused_dags_by_default')
+        show_paused_arg = request.args.get('showPaused', 'None')
+        if show_paused_arg.strip().lower() == 'false':
+            hide_paused = True
 
+        elif show_paused_arg.strip().lower() == 'true':
+            hide_paused = False
+
+        else:
+            hide_paused = hide_paused_dags_by_default
+
+        # read orm_dags from the db
         qry = session.query(DM)
         qry_fltr = []
 
@@ -1867,7 +1907,12 @@ class HomeView(AdminIndexView):
                 ~DM.is_subdag, DM.is_active
             ).all()
 
-        orm_dags = {dag.dag_id: dag for dag in qry_fltr}
+        # optionally filter out "paused" dags
+        if hide_paused:
+            orm_dags = {dag.dag_id: dag for dag in qry_fltr if not dag.is_paused}
+
+        else:
+            orm_dags = {dag.dag_id: dag for dag in qry_fltr}
 
         import_errors = session.query(models.ImportError).all()
         for ie in import_errors:
@@ -1879,7 +1924,14 @@ class HomeView(AdminIndexView):
         session.close()
 
         # get a list of all non-subdag dags visible to everyone
-        unfiltered_webserver_dags = [dag for dag in dagbag.dags.values() if not dag.parent_dag]
+        # optionally filter out "paused" dags
+        if hide_paused:
+            unfiltered_webserver_dags = [dag for dag in dagbag.dags.values() if
+                                         not dag.parent_dag and not dag.is_paused]
+
+        else:
+            unfiltered_webserver_dags = [dag for dag in dagbag.dags.values() if
+                                         not dag.parent_dag]
 
         # optionally filter to get only dags that the user should see
         if do_filter and owner_mode == 'ldapgroup':
@@ -1907,6 +1959,7 @@ class HomeView(AdminIndexView):
             'airflow/dags.html',
             webserver_dags=webserver_dags,
             orm_dags=orm_dags,
+            hide_paused=hide_paused,
             all_dag_ids=all_dag_ids)
 
 

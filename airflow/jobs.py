@@ -64,6 +64,7 @@ Stats = settings.Stats
 
 _log = logging.getLogger(__name__)
 
+
 class BaseJob(Base, LoggingMixin):
     """
     Abstract class to be derived for jobs. Jobs are processing items with state
@@ -798,7 +799,11 @@ class SchedulerJob(BaseJob):
             # don't consider runs that are executed in the future
             if run.execution_date > datetime.now():
                 self.logger.error("Execution date is in future: {}"
-                                   .format(run.execution_date))
+                                  .format(run.execution_date))
+                continue
+
+            if len(active_dag_runs) >= dag.max_active_runs:
+                self.logger.info("Active dag runs > max_active_run.")
                 continue
 
             # skip backfill dagruns for now as long as they are not really scheduled
