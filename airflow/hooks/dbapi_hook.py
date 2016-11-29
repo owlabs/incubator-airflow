@@ -205,16 +205,16 @@ class DbApiHook(BaseHook):
         else:
             target_fields = ''
         conn = self.get_conn()
-        cur = conn.cursor()
         if self.supports_autocommit:
-            cur.execute('SET autocommit = 0')
+            self.set_autocommit(conn, False)
         conn.commit()
+        cur = conn.cursor()
         i = 0
         for row in rows:
             i += 1
             l = []
             for cell in row:
-                l.append(self._serialize_cell(cell))
+                l.append(self._serialize_cell(cell, conn))
             values = tuple(l)
             sql = "INSERT INTO {0} {1} VALUES ({2});".format(
                 table,
@@ -232,7 +232,18 @@ class DbApiHook(BaseHook):
             "Done loading. Loaded a total of {i} rows".format(**locals()))
 
     @staticmethod
-    def _serialize_cell(cell):
+    def _serialize_cell(cell, conn=None):
+        """
+        Returns the SQL literal of the cell as a string.
+
+        :param cell: The cell to insert into the table
+        :type cell: object
+        :param conn: The database connection
+        :type conn: connection object
+        :return: The serialized cell
+        :rtype: str
+        """
+
         if isinstance(cell, basestring):
             return "'" + str(cell).replace("'", "''") + "'"
         elif cell is None:

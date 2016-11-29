@@ -32,15 +32,14 @@ from builtins import str
 from collections import OrderedDict
 from configparser import ConfigParser
 
+from .exceptions import AirflowConfigException
+
 # show Airflow's deprecation warnings
 warnings.filterwarnings(
     action='default', category=DeprecationWarning, module='airflow')
 warnings.filterwarnings(
     action='default', category=PendingDeprecationWarning, module='airflow')
 
-
-class AirflowConfigException(Exception):
-    pass
 
 try:
     from cryptography.fernet import Fernet
@@ -174,6 +173,16 @@ security =
 # values at runtime)
 unit_test_mode = False
 
+[cli]
+# In what way should the cli access the API. The LocalClient will use the
+# database directly, while the json_client will use the api running on the
+# webserver
+api_client = airflow.api.client.local_client
+endpoint_url = http://localhost:8080
+
+[api]
+# How to authenticate users of the API
+auth_backend = airflow.api.auth.backend.default
 
 [operators]
 # The default owner assigned to each new operator, unless
@@ -251,6 +260,14 @@ dag_orientation = LR
 # Puts the webserver in demonstration mode; blurs the names of Operators for
 # privacy.
 demo_mode = False
+
+# The amount of time (in secs) webserver will wait for initial handshake
+# while fetching logs from other worker machine
+log_fetch_timeout_sec = 5
+
+# By default, the webserver shows paused DAGs. Flip this to hide paused
+# DAGs by default
+hide_paused_dags_by_default = False
 
 [email]
 email_backend = airflow.utils.email.send_email_smtp
@@ -420,6 +437,13 @@ dags_are_paused_at_creation = False
 fernet_key = {FERNET_KEY}
 non_pooled_task_slot_count = 128
 
+[cli]
+api_client = airflow.api.client.local_client
+endpoint_url = http://localhost:8080
+
+[api]
+auth_backend = airflow.api.auth.backend.default
+
 [operators]
 default_owner = airflow
 
@@ -428,6 +452,8 @@ base_url = http://localhost:8080
 web_server_host = 0.0.0.0
 web_server_port = 8080
 dag_orientation = LR
+log_fetch_timeout_sec = 5
+hide_paused_dags_by_default = False
 
 [email]
 email_backend = airflow.utils.email.send_email_smtp

@@ -14,11 +14,13 @@
 #
 import logging
 import socket
+import six
 
 from flask import Flask
 from flask_admin import Admin, base
 from flask_cache import Cache
 from flask_wtf.csrf import CsrfProtect
+csrf = CsrfProtect()
 
 import airflow
 from airflow import models
@@ -29,20 +31,23 @@ from airflow import jobs
 from airflow import settings
 from airflow import configuration
 
-csrf = CsrfProtect()
 _log = logging.getLogger(__name__)
 
-
-def create_app(config=None):
+def create_app(config=None, testing=False):
     app = Flask(__name__)
     app.secret_key = configuration.get('webserver', 'SECRET_KEY')
     app.config['LOGIN_DISABLED'] = not configuration.getboolean('webserver', 'AUTHENTICATE')
 
     csrf.init_app(app)
 
-    #app.config = config
+    app.config['TESTING'] = testing
+
     airflow.load_login()
     airflow.login.login_manager.init_app(app)
+
+    from airflow import api
+    api.load_auth()
+    api.api_auth.init_app(app)
 
     cache = Cache(
         app=app, config={'CACHE_TYPE': 'filesystem', 'CACHE_DIR': '/tmp'})
@@ -122,6 +127,18 @@ def create_app(config=None):
                 admin.add_link(ml)
 
         integrate_plugins()
+
+        import airflow.www.api.experimental.endpoints as e
+        # required for testing purposes otherwise the module retains
+        # a link to the default_auth
+        if app.config['TESTING']:
+            if six.PY2:
+                reload(e)
+            else:
+                import importlib
+                importlib.reload(e)
+
+        app.register_blueprint(e.api_experimental, url_prefix='/api/experimental')
 
         @app.context_processor
         def jinja_globals():

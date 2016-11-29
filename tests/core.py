@@ -192,6 +192,34 @@ class CoreTest(unittest.TestCase):
         assert dag_run2 is None
         dag.clear()
 
+    def test_fractional_seconds(self):
+        """
+        Tests if fractional seconds are stored in the database
+        """
+        dag = DAG(TEST_DAG_ID + 'test_fractional_seconds')
+        dag.schedule_interval = '@once'
+        dag.add_task(models.BaseOperator(
+            task_id="faketastic",
+            owner='Also fake',
+            start_date=datetime(2015, 1, 2, 0, 0)))
+
+        start_date = datetime.now()
+
+        run = dag.create_dagrun(
+            run_id='test_' + start_date.isoformat(),
+            execution_date=start_date,
+            start_date=start_date,
+            state=State.RUNNING,
+            external_trigger=False
+        )
+
+        run.refresh_from_db()
+
+        self.assertEqual(start_date, run.execution_date,
+                         "dag run execution_date loses precision")
+        self.assertEqual(start_date, run.start_date,
+                         "dag run start_date loses precision ")
+
     def test_schedule_dag_start_end_dates(self):
         """
         Tests that an attempt to schedule a task after the Dag's end_date
@@ -661,6 +689,18 @@ class CoreTest(unittest.TestCase):
         assert default_value == Variable.get("thisIdDoesNotExist",
                                              default_var=default_value,
                                              deserialize_json=True)
+
+    def test_variable_setdefault_round_trip(self):
+        key = "tested_var_setdefault_1_id"
+        value = "Monday morning breakfast in Paris"
+        Variable.setdefault(key, value)
+        assert value == Variable.get(key)
+
+    def test_variable_setdefault_round_trip_json(self):
+        key = "tested_var_setdefault_2_id"
+        value = {"city": 'Paris', "Hapiness": True}
+        Variable.setdefault(key, value, deserialize_json=True)
+        assert value == Variable.get(key, deserialize_json=True)
 
     def test_parameterized_config_gen(self):
 
@@ -1333,6 +1373,18 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get('/health')
         assert 'The server is healthy!' in response.data.decode('utf-8')
 
+    def test_headers(self):
+        response = self.app.get('/admin/airflow/headers')
+        assert '"headers":' in response.data.decode('utf-8')
+
+    def test_noaccess(self):
+        response = self.app.get('/admin/airflow/noaccess')
+        assert "You don't seem to have access." in response.data.decode('utf-8')
+
+    def test_pickle_info(self):
+        response = self.app.get('/admin/airflow/pickle_info')
+        assert '{' in response.data.decode('utf-8')
+
     def test_dag_views(self):
         response = self.app.get(
             '/admin/airflow/graph?dag_id=example_bash_operator')
@@ -1901,7 +1953,7 @@ class EmailTest(unittest.TestCase):
     def test_custom_backend(self, mock_send_email):
         configuration.set('email', 'EMAIL_BACKEND', 'tests.core.send_email_test')
         utils.email.send_email('to', 'subject', 'content')
-        send_email_test.assert_called_with('to', 'subject', 'content', files=None, dryrun=False, cc=None, bcc=None)
+        send_email_test.assert_called_with('to', 'subject', 'content', files=None, dryrun=False, cc=None, bcc=None, mime_subtype='mixed')
         assert not mock_send_email.called
 
 

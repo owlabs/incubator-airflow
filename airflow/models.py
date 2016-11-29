@@ -755,6 +755,7 @@ class TaskInstance(Base):
         self.unixname = getpass.getuser()
         if state:
             self.state = state
+        self.hostname = ''
         self.init_on_load()
 
     @reconstructor
@@ -956,6 +957,7 @@ class TaskInstance(Base):
             self.start_date = ti.start_date
             self.end_date = ti.end_date
             self.try_number = ti.try_number
+            self.hostname = ti.hostname
         else:
             self.state = None
 
@@ -1137,8 +1139,7 @@ class TaskInstance(Base):
         """
         dr = session.query(DagRun).filter(
             DagRun.dag_id == self.dag_id,
-            DagRun.execution_date == self.execution_date,
-            DagRun.start_date == self.start_date
+            DagRun.execution_date == self.execution_date
         ).first()
 
         return dr
@@ -1197,6 +1198,7 @@ class TaskInstance(Base):
                 dep_context=queue_dep_context,
                 session=session,
                 verbose=True):
+            session.commit()
             return
 
         self.clear_xcom_data()
@@ -1232,9 +1234,18 @@ class TaskInstance(Base):
                 _log.info(hr + msg + hr)
 
                 self.queued_dttm = datetime.now()
+                msg = "Queuing into pool {}".format(self.pool)
+                logging.info(msg)
                 session.merge(self)
-                session.commit()
-                _log.info("Queuing into pool {}".format(self.pool))
+            session.commit()
+            return
+
+        # Another worker might have started running this task instance while
+        # the current worker process was blocked on refresh_from_db
+        if self.state == State.RUNNING:
+            msg = "Task Instance already running {}".format(self)
+            logging.warn(msg)
+            session.commit()
             return
 
         # print status message
@@ -2673,17 +2684,22 @@ class DAG(BaseDag, LoggingMixin):
         return dttm
 
     @provide_session
-    def get_last_dagrun(self, session=None):
+    def get_last_dagrun(self, session=None, include_externally_triggered=False):
         """
         Returns the last dag run for this dag, None if there was none.
         Last dag run can be any type of run eg. scheduled or backfilled.
         Overriden DagRuns are ignored
         """
         DR = DagRun
-        last = session.query(DR).filter(
+        qry = session.query(DR).filter(
             DR.dag_id == self.dag_id,
-            DR.external_trigger == False
-        ).order_by(DR.execution_date.desc()).first()
+        )
+        if not include_externally_triggered:
+            qry = qry.filter(DR.external_trigger.is_(False))
+
+        qry = qry.order_by(DR.execution_date.desc())
+
+        last = qry.first()
 
         return last
 
@@ -3359,6 +3375,36 @@ class Variable(Base):
                        descriptor=property(cls.get_val, cls.set_val))
 
     @classmethod
+    def setdefault(cls, key, default, deserialize_json=False):
+        """
+        Like a Python builtin dict object, setdefault returns the current value
+        for a key, and if it isn't there, stores the default value and returns it.
+
+        :param key: Dict key for this Variable
+        :type key: String
+        :param: default: Default value to set and return if the variable
+        isn't already in the DB
+        :type: default: Mixed
+        :param: deserialize_json: Store this as a JSON encoded value in the DB
+         and un-encode it when retrieving a value
+        :return: Mixed
+        """
+        default_sentinel = object()
+        obj = Variable.get(key, default_var=default_sentinel, deserialize_json=False)
+        if obj is default_sentinel:
+            if default is not None:
+                Variable.set(key, default, serialize_json=deserialize_json)
+                return default
+            else:
+                raise ValueError('Default Value must be set')
+        else:
+            if deserialize_json:
+                return json.loads(obj.val)
+            else:
+                return obj.val
+
+
+    @classmethod
     @provide_session
     def get(cls, key, default_var=None, deserialize_json=False, session=None):
         obj = session.query(cls).filter(cls.key == key).first()
@@ -3366,7 +3412,7 @@ class Variable(Base):
             if default_var is not None:
                 return default_var
             else:
-                raise ValueError('Variable {} does not exist'.format(key))
+                raise KeyError('Variable {} does not exist'.format(key))
         else:
             if deserialize_json:
                 return json.loads(obj.val)
@@ -3643,14 +3689,16 @@ class DagRun(Base):
         """
         DR = DagRun
 
+        exec_date = func.cast(self.execution_date, DateTime)
+
         dr = session.query(DR).filter(
             DR.dag_id == self.dag_id,
-            DR.execution_date == self.execution_date,
+            func.cast(DR.execution_date, DateTime) == exec_date,
             DR.run_id == self.run_id
-        ).first()
-        if dr:
-            self.id = dr.id
-            self.state = dr.state
+        ).one()
+
+        self.id = dr.id
+        self.state = dr.state
 
     @staticmethod
     @provide_session
