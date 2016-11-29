@@ -86,8 +86,6 @@ def create_app(config=None, testing=False):
             models.Pool, Session, name="Pools", category="Admin"))
         av(vs.ConfigurationView(
             name='Configuration', category="Admin"))
-        av(vs.ErrorLogView(
-            name='Error Log', category="Admin"))
         av(vs.UserModelView(
             models.User, Session, name="Users", category="Admin"))
         av(vs.ConnectionModelView(
