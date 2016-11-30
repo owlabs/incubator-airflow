@@ -32,15 +32,14 @@ from builtins import str
 from collections import OrderedDict
 from configparser import ConfigParser
 
+from .exceptions import AirflowConfigException
+
 # show Airflow's deprecation warnings
 warnings.filterwarnings(
     action='default', category=DeprecationWarning, module='airflow')
 warnings.filterwarnings(
     action='default', category=PendingDeprecationWarning, module='airflow')
 
-
-class AirflowConfigException(Exception):
-    pass
 
 try:
     from cryptography.fernet import Fernet
@@ -102,6 +101,10 @@ dags_folder = {AIRFLOW_HOME}/dags
 # The folder where airflow should store its log files
 # This path must be absolute
 base_log_folder = {AIRFLOW_HOME}/logs
+clear_inherited_logging_settings = True
+log_to_debug_file = False
+log_to_error_file = True
+log_to_console = True
 
 # Airflow can store logs remotely in AWS S3 or Google Cloud Storage. Users
 # must supply a remote location URL (starting with either 's3://...' or
@@ -256,6 +259,11 @@ demo_mode = False
 # milliseconds. If not set or set to 0, the graph will require refreshing
 # manually. Otherwise the manual refresh button will not be displayed.
 graph_refresh_rate = 0
+
+# The amount of time (in secs) webserver will wait for initial handshake
+# while fetching logs from other worker machine
+log_fetch_timeout_sec = 5
+
 
 [email]
 email_backend = airflow.utils.email.send_email_smtp
@@ -439,6 +447,7 @@ base_url = http://localhost:8080
 web_server_host = 0.0.0.0
 web_server_port = 8080
 dag_orientation = LR
+log_fetch_timeout_sec = 5
 
 [email]
 email_backend = airflow.utils.email.send_email_smtp
