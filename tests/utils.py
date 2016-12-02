@@ -20,12 +20,10 @@ from __future__ import unicode_literals
 import logging
 import unittest
 from io import StringIO
-from tempfile import NamedTemporaryFile
 import os
 
 import airflow.utils.logging as logging_utils
 from airflow import configuration
-from airflow import settings
 from airflow.exceptions import AirflowException
 from airflow.utils.operator_resources import Resources
 
@@ -90,6 +88,110 @@ class LoggingHandlerSetupTests(unittest.TestCase):
             log_file.seek(0)
             log_message = log_file.read()
             self.assertIn("test message", log_message)
+
+
+class LoggingControllerTests(unittest.TestCase):
+
+    def setUp(self):
+        self.logger = logging.root.getChild('airflow')
+        self.existing_handlers = self.logger.handlers
+        self.logger.handlers = []
+        self.base_log_folder = os.path.expanduser(
+            configuration.get('core', 'BASE_LOG_FOLDER'))
+
+        # Use the file paths that are used by the Logging Controller.
+        self.debug_log_file_path = '{}/debug.log'.format(self.base_log_folder)
+        self.error_log_file_path = '{}/error.log'.format(self.base_log_folder)
+
+        # Ensure the log files are empty.
+        open(self.debug_log_file_path, 'w').close()
+        open(self.error_log_file_path, 'w').close()
+
+    def tearDown(self):
+        self.logger.handlers = self.existing_handlers
+
+        # Ensure the log files are empty.
+        open(self.debug_log_file_path, 'w').close()
+        open(self.error_log_file_path, 'w').close()
+
+    def test_enable_debug_file_log(self):
+        logging_utils.logging_controller.enable_debug_file_log()
+        logger = logging.getLogger('airflow.test')
+        logger.info("debug file test")
+        with open(self.debug_log_file_path, "r") as log_file:
+            log_file.seek(0)
+            log_message = log_file.read()
+        log_file.close()
+        self.assertIn("debug file test", log_message)
+
+    def test_enable_error_file_log(self):
+        logging_utils.logging_controller.enable_error_file_log()
+        logger = logging.getLogger('airflow.test')
+        logger.error("error file test")
+        with open(self.error_log_file_path, "r") as log_file:
+            log_file.seek(0)
+            log_message = log_file.read()
+        log_file.close()
+        self.assertIn("error file test", log_message)
+
+    def test_enable_console_log(self):
+        stream = StringIO()
+        logging_utils.logging_controller.enable_console_log()
+
+        # Redirect the stream so we can check output
+        logging_utils.logging_controller._console_log_handler
+        logging_utils.logging_controller._console_log_handler.stream = stream
+
+        logger = logging.getLogger('airflow.test')
+        logger.info(u'console test')
+        self.assertIn("console test", stream.getvalue())
+
+    def test_disable_debug_file_log(self):
+        file_handler = logging.FileHandler(
+            self.debug_log_file_path)
+        logging_utils.logging_controller._debug_file_log_handler = file_handler
+        logging_utils.logging_controller._logger.addHandler(file_handler)
+        logging_utils.logging_controller.disable_debug_file_log()
+        self.assertFalse(self.logger.handlers)
+
+    def test_disable_error_file_log(self):
+        file_handler = logging.FileHandler(
+            self.error_log_file_path)
+        logging_utils.logging_controller._error_file_log_handler = file_handler
+        logging_utils.logging_controller._logger.addHandler(file_handler)
+        logging_utils.logging_controller.disable_error_file_log()
+        self.assertFalse(self.logger.handlers)
+
+    def test_disable_console_log(self):
+        stream_handler = logging.StreamHandler()
+        logging_utils.logging_controller._console_log_handler = stream_handler
+        logging_utils.logging_controller._logger.addHandler(stream_handler)
+        logging_utils.logging_controller.disable_console_log()
+        self.assertFalse(self.logger.handlers)
+
+    def test_clear_handlers(self):
+        debug_file_handler = logging.FileHandler(
+            self.debug_log_file_path)
+        logging_utils.logging_controller._debug_file_log_handler = debug_file_handler
+        logging_utils.logging_controller._logger.addHandler(debug_file_handler)
+        
+        error_file_handler= logging.FileHandler(
+            self.error_log_file_path)
+        logging_utils.logging_controller._error_file_log_handler = error_file_handler
+        logging_utils.logging_controller._logger.addHandler(error_file_handler)
+
+        stream_handler = logging.StreamHandler()
+        logging_utils.logging_controller._console_log_handler = stream_handler
+        logging_utils.logging_controller._logger.addHandler(
+            logging_utils.logging_controller._console_log_handler)
+
+        self.logger.addHandler(logging.FileHandler(
+            self.debug_log_file_path))
+        self.logger.addHandler(logging.FileHandler(
+            self.error_log_file_path))
+        self.logger.addHandler(stream_handler)
+        logging_utils.logging_controller.clear_handlers()
+        self.assertFalse(self.logger.handlers)
 
 
 class LoggingMixinTest(unittest.TestCase):
