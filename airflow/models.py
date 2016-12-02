@@ -1244,7 +1244,7 @@ class TaskInstance(Base):
         # the current worker process was blocked on refresh_from_db
         if self.state == State.RUNNING:
             msg = "Task Instance already running {}".format(self)
-            logging.warn(msg)
+            _log.warn(msg)
             session.commit()
             return
 

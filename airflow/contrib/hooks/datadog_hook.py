@@ -59,7 +59,7 @@ class DatadogHook(BaseHook):
 
     def validate_response(self, response):
         if response['status'] != 'ok':
-            logging.error("Data dog returned: " + response)
+            _log.error("Data dog returned: " + response)
             raise AirflowException("Error status received from datadog")
 
     def send_metric(self, metric_name, datapoint, tags=None):
