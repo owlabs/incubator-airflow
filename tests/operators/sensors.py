@@ -33,6 +33,7 @@ TEST_DAG_ID = 'unit_test_dag'
 
 _log = logging.getLogger('airflow')
 
+
 class TimeoutTestSensor(BaseSensorOperator):
     """
     Sensor that always returns the return_value provided

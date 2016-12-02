@@ -47,6 +47,7 @@ _SERVICE_NAME = None
 
 _log = logging.getLogger(__name__)
 
+
 def init_app(app):
     global _SERVICE_NAME
 

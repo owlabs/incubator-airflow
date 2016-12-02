@@ -22,6 +22,7 @@ from airflow.contrib.hooks.aws_hook import AwsHook
 
 _log = logging.getLogger(__name__)
 
+
 class ECSOperator(BaseOperator):
 
     """

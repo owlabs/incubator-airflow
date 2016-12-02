@@ -21,6 +21,7 @@ from datadog import initialize, api
 
 _log = logging.getLogger(__name__)
 
+
 class DatadogHook(BaseHook):
     """
     Uses datadog API to send metrics of practically anything measurable,

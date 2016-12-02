@@ -32,6 +32,7 @@ import time
 
 _log = logging.getLogger(__name__)
 
+
 class SalesforceHook(BaseHook):
     def __init__(
             self,

@@ -20,6 +20,7 @@ from airflow.utils.decorators import apply_defaults
 
 _log = logging.getLogger(__name__)
 
+
 class GoogleCloudStorageObjectSensor(BaseSensorOperator):
     """
     Checks for the existence of a file in Google Cloud Storage.

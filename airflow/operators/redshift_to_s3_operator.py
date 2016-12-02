@@ -21,6 +21,7 @@ from airflow.utils.decorators import apply_defaults
 
 _log = logging.getLogger(__name__)
 
+
 class RedshiftToS3Transfer(BaseOperator):
     """
     Executes an UNLOAD command to s3 as a CSV with headers

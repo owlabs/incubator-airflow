@@ -31,6 +31,7 @@ from airflow.utils.operator_resources import Resources
 
 _log = logging.getLogger('airflow')
 
+
 class LogUtilsTest(unittest.TestCase):
 
     def test_gcs_url_parse(self):
