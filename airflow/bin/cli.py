@@ -175,7 +175,7 @@ def trigger_dag(args):
         logging.error(err)
         raise AirflowException(err)
 
-    logging.info(message)
+    _log.info(message)
 
 
 def pool(args):

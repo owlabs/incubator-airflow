@@ -132,7 +132,7 @@ class SSHExecuteOperator(BaseOperator):
                          "location : {0}:{1}".format(host, remote_file_path))
             _log.info("Running command: " + bash_command)
             if self.env is not None:
-                logging.info("env: " + str(self.env))
+                _log.info("env: " + str(self.env))
 
             sp = hook.Popen(
                 ['-q', 'bash', remote_file_path],

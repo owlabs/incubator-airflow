@@ -436,7 +436,7 @@ class BigQueryBaseCursor(object):
                     "'WRITE_APPEND' or 'WRITE_TRUNCATE'."
                 )
             else:
-                logging.info(
+                _log.info(
                     "Adding experimental "
                     "'schemaUpdateOptions': {0}".format(schema_update_options)
                 )

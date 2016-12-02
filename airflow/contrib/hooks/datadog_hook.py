@@ -19,6 +19,7 @@ from airflow.hooks.base_hook import BaseHook
 from airflow.exceptions import AirflowException
 from datadog import initialize, api
 
+_log = logging.getLogger(__name__)
 
 class DatadogHook(BaseHook):
     """
@@ -48,7 +49,7 @@ class DatadogHook(BaseHook):
         if self.app_key is None:
             raise AirflowException("app_key must be specified in the Datadog connection details")
 
-        logging.info("Setting up api keys for datadog")
+        _log.info("Setting up api keys for datadog")
         options = {
             'api_key': self.api_key,
             'app_key': self.app_key
