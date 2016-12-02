@@ -2801,6 +2801,27 @@ class DAG(BaseDag, LoggingMixin):
             DagModel.dag_id == self.dag_id)
         return qry.value('is_paused')
 
+    @provide_session
+    def get_active_runs(self, session=None):
+        """
+        Returns a list of "running" tasks
+        :param session:
+        :return: List of execution dates
+        """
+        runs = (
+           session.query(DagRun)
+           .filter(
+           DagRun.dag_id == self.dag_id,
+           DagRun.state == State.RUNNING)
+           .order_by(DagRun.execution_date)
+           .all())
+
+        active_dates = []
+        for run in runs:
+            active_dates.append(run.execution_date)
+
+        return active_dates
+
     @property
     def latest_execution_date(self):
         """
@@ -3450,6 +3471,10 @@ class XCom(Base):
     task_id = Column(String(ID_LEN), nullable=False)
     dag_id = Column(String(ID_LEN), nullable=False)
 
+    __table_args__ = (
+        Index('idx_xcom_dag_task_date', dag_id, task_id, execution_date, unique=False),
+    )
+
     def __repr__(self):
         return '<XCom "{key}" ({task_id} @ {execution_date})>'.format(
             key=self.key,
@@ -3982,7 +4007,8 @@ class Pool(Base):
         Returns the number of slots open at the moment
         """
         used_slots = self.used_slots(session=session)
-        return self.slots - used_slots
+        queued_slots = self.queued_slots(session=session)
+        return self.slots - used_slots - queued_slots
 
 
 class SlaMiss(Base):
