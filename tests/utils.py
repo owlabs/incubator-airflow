@@ -147,41 +147,33 @@ class LoggingControllerTests(unittest.TestCase):
         self.assertIn("console test", stream.getvalue())
 
     def test_disable_debug_file_log(self):
-        file_handler = logging.FileHandler(
-            self.debug_log_file_path)
-        logging_utils.logging_controller._debug_file_log_handler = file_handler
+        file_handler = logging_utils.logging_controller._debug_file_log_handler
         logging_utils.logging_controller._logger.addHandler(file_handler)
         logging_utils.logging_controller.disable_debug_file_log()
         self.assertFalse(self.logger.handlers)
 
     def test_disable_error_file_log(self):
-        file_handler = logging.FileHandler(
-            self.error_log_file_path)
-        logging_utils.logging_controller._error_file_log_handler = file_handler
+        file_handler = logging_utils.logging_controller._error_file_log_handler
         logging_utils.logging_controller._logger.addHandler(file_handler)
         logging_utils.logging_controller.disable_error_file_log()
         self.assertFalse(self.logger.handlers)
 
     def test_disable_console_log(self):
-        stream_handler = logging.StreamHandler()
-        logging_utils.logging_controller._console_log_handler = stream_handler
+        stream_handler = logging_utils.logging_controller._console_log_handler
         logging_utils.logging_controller._logger.addHandler(stream_handler)
         logging_utils.logging_controller.disable_console_log()
         self.assertFalse(self.logger.handlers)
 
     def test_clear_handlers(self):
-        debug_file_handler = logging.FileHandler(
-            self.debug_log_file_path)
-        logging_utils.logging_controller._debug_file_log_handler = debug_file_handler
+        debug_file_handler = \
+            logging_utils.logging_controller._debug_file_log_handler
         logging_utils.logging_controller._logger.addHandler(debug_file_handler)
         
-        error_file_handler= logging.FileHandler(
-            self.error_log_file_path)
-        logging_utils.logging_controller._error_file_log_handler = error_file_handler
+        error_file_handler = \
+            logging_utils.logging_controller._error_file_log_handler
         logging_utils.logging_controller._logger.addHandler(error_file_handler)
 
-        stream_handler = logging.StreamHandler()
-        logging_utils.logging_controller._console_log_handler = stream_handler
+        stream_handler = logging_utils.logging_controller._console_log_handler
         logging_utils.logging_controller._logger.addHandler(
             logging_utils.logging_controller._console_log_handler)
 
