@@ -24,7 +24,7 @@ import time
 
 from airflow import models, settings, AirflowException
 from airflow.exceptions import AirflowSkipException
-from airflow.models import DAG, TaskInstance as TI
+from airflow.models import DAG, TaskExclusion, TaskExclusionType, TaskInstance as TI
 from airflow.models import State as ST
 from airflow.models import DagModel
 from airflow.operators.dummy_operator import DummyOperator
@@ -34,6 +34,8 @@ from airflow.ti_deps.deps.trigger_rule_dep import TriggerRuleDep
 from airflow.utils.state import State
 from mock import patch
 from nose_parameterized import parameterized
+
+
 
 DEFAULT_DATE = datetime.datetime(2016, 1, 1)
 TEST_DAGS_FOLDER = os.path.join(
@@ -623,3 +625,34 @@ class TaskInstanceTest(unittest.TestCase):
                                       key=key,
                                       include_prior_dates=True),
                          value)
+
+
+class TaskExclusionTest(unittest.TestCase):
+    def test_set_exclusion(self):
+
+        dag_id = 'test_task_exclude'
+        task_id = 'test_task_exclude'
+
+        dag = models.DAG(dag_id=dag_id,
+                         schedule_interval='@monthly')
+
+        task = DummyOperator(
+            task_id=task_id,
+            dag=dag,
+            pool='test_task_exclude',
+            owner='airflow',
+            start_date=datetime.datetime(2016, 6, 2, 0, 0, 0))
+
+        exec_date = datetime.datetime.now()
+
+        ti = TI(
+            task=task, execution_date=exec_date)
+
+        TaskExclusion.set(dag_id = dag_id,
+                          task_id = task_id,
+                          exclusion_type = TaskExclusionType.SINGLE_DATE,
+                          exclusion_start_date = exec_date,
+                          exclusion_end_date = exec_date,
+                          created_by = 'airflow')
+
+        self.assertEqual(ti.state, State.EXCLUDED)
