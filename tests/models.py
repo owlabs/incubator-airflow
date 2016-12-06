@@ -630,6 +630,8 @@ class TaskInstanceTest(unittest.TestCase):
 class TaskExclusionTest(unittest.TestCase):
     def test_set_exclusion(self):
 
+        session = settings.Session()
+
         dag_id = 'test_task_exclude'
         task_id = 'test_task_exclude'
 
@@ -648,11 +650,17 @@ class TaskExclusionTest(unittest.TestCase):
         ti = TI(
             task=task, execution_date=exec_date)
 
-        TaskExclusion.set(dag_id = dag_id,
-                          task_id = task_id,
-                          exclusion_type = TaskExclusionType.SINGLE_DATE,
-                          exclusion_start_date = exec_date,
-                          exclusion_end_date = exec_date,
-                          created_by = 'airflow')
+        TaskExclusion.set(dag_id=dag_id,
+                          task_id=task_id,
+                          exclusion_type=TaskExclusionType.SINGLE_DATE,
+                          exclusion_start_date=exec_date,
+                          exclusion_end_date=exec_date,
+                          created_by='airflow')
 
-        self.assertEqual(ti.state, State.EXCLUDED)
+        exclusion = session.query(models.TaskExclusion).filter_by(
+            dag_id=dag_id, task_id=task_id, exec_date=exec_date,
+            exclusion_type=TaskExclusionType.EXCLUDED,
+            exclusion_start_date=exec_date, exclusion_end_date=exec_date,
+            created_by='airflow')
+
+        self.assertTrue(exclusion)
