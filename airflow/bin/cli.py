@@ -172,10 +172,10 @@ def trigger_dag(args):
                                          run_id=args.run_id,
                                          conf=args.conf)
     except IOError as err:
-        logging.error(err)
+        _log.error(err)
         raise AirflowException(err)
 
-    logging.info(message)
+    _log.info(message)
 
 
 def pool(args):

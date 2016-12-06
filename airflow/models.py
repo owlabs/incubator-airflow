@@ -1235,7 +1235,7 @@ class TaskInstance(Base):
 
                 self.queued_dttm = datetime.now()
                 msg = "Queuing into pool {}".format(self.pool)
-                logging.info(msg)
+                _log.info(msg)
                 session.merge(self)
             session.commit()
             return
@@ -1244,7 +1244,7 @@ class TaskInstance(Base):
         # the current worker process was blocked on refresh_from_db
         if self.state == State.RUNNING:
             msg = "Task Instance already running {}".format(self)
-            logging.warn(msg)
+            _log.warn(msg)
             session.commit()
             return
 
