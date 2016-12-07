@@ -654,4 +654,6 @@ class TaskExclusionTest(unittest.TestCase):
                         TaskExclusion.exclusion_end_date == exec_date,
                         TaskExclusion.created_by == 'airflow').first()
 
+        print("debugging")
+        print(exclusion)
         self.assertTrue(exclusion)
