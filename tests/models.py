@@ -638,17 +638,7 @@ class TaskExclusionTest(unittest.TestCase):
         dag = models.DAG(dag_id=dag_id,
                          schedule_interval='@monthly')
 
-        task = DummyOperator(
-            task_id=task_id,
-            dag=dag,
-            pool='test_task_exclude',
-            owner='airflow',
-            start_date=datetime.datetime(2016, 6, 2, 0, 0, 0))
-
         exec_date = datetime.datetime.now()
-
-        ti = TI(
-            task=task, execution_date=exec_date)
 
         TaskExclusion.set(dag_id=dag_id,
                           task_id=task_id,
@@ -663,6 +653,6 @@ class TaskExclusionTest(unittest.TestCase):
                         exclusion_type=TaskExclusionType.SINGLE_DATE,
                         exclusion_start_date=exec_date,
                         exclusion_end_date=exec_date,
-                        created_by='airflow')
+                        created_by='airflow').first()
 
         self.assertTrue(exclusion)
