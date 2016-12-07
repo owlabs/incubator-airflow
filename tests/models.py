@@ -659,8 +659,9 @@ class TaskExclusionTest(unittest.TestCase):
 
         exclusion = session.query(models.TaskExclusion).filter_by(
             dag_id=dag_id, task_id=task_id, exec_date=exec_date,
-            exclusion_type=State.EXCLUDED,
-            exclusion_start_date=exec_date, exclusion_end_date=exec_date,
+            exclusion_type=TaskExclusionType.SINGLE_DATE,
+            exclusion_start_date=exec_date,
+            exclusion_end_date=exec_date,
             created_by='airflow')
 
         self.assertTrue(exclusion)
