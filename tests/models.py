@@ -645,12 +645,16 @@ class TaskExclusionTest(unittest.TestCase):
                           exclusion_end_date=exec_date,
                           created_by='airflow')
 
+        session.expunge_all()
+
         exclusion = session.query(TaskExclusion).filter(
                         TaskExclusion.dag_id == dag_id,
                         TaskExclusion.task_id == task_id,
                         TaskExclusion.exclusion_type == TaskExclusionType.SINGLE_DATE,
                         TaskExclusion.exclusion_start_date == exec_date,
                         TaskExclusion.exclusion_end_date == exec_date).first()
+
+
 
         print("debugging")
         print(exclusion)
