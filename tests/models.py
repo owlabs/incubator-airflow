@@ -628,16 +628,14 @@ class TaskInstanceTest(unittest.TestCase):
 
 
 class TaskExclusionTest(unittest.TestCase):
-    def test_set_exclusion(self):
+    def test_set_exclusion(self, session=None):
 
         session = settings.Session()
 
+        session.expunge_all()
+
         dag_id = 'test_task_exclude'
         task_id = 'test_task_exclude'
-
-        dag = models.DAG(dag_id=dag_id,
-                         schedule_interval='@monthly')
-
         exec_date = datetime.datetime.now()
 
         TaskExclusion.set(dag_id=dag_id,
@@ -647,12 +645,13 @@ class TaskExclusionTest(unittest.TestCase):
                           exclusion_end_date=exec_date,
                           created_by='airflow')
 
-        exclusion = session.query(models.TaskExclusion).filter_by(
-                        dag_id=dag_id,
-                        task_id=task_id,
-                        exclusion_type=TaskExclusionType.SINGLE_DATE,
-                        exclusion_start_date=exec_date,
-                        exclusion_end_date=exec_date,
-                        created_by='airflow').first()
+        exclusion = session.query(TaskExclusion).filter(
+                        TaskExclusion.dag_id == dag_id,
+                        TaskExclusion.task_id == task_id,
+                        TaskExclusion.exclusion_type ==
+                        TaskExclusionType.SINGLE_DATE,
+                        TaskExclusion.exclusion_start_date == exec_date,
+                        TaskExclusion.exclusion_end_date == exec_date,
+                        TaskExclusion.created_by == 'airflow').first()
 
         self.assertTrue(exclusion)
