@@ -35,12 +35,12 @@ def upgrade():
     op.create_table(
         'task_exclusion',
         sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('dag_id', sa.String(ID_LEN), nullable=False),
-        sa.Column('task_id', sa.String(ID_LEN), nullable=False),
-        sa.Column('exclusion_type', sa.String(32), nullable=False),
+        sa.Column('dag_id', sa.String(length=ID_LEN), nullable=False),
+        sa.Column('task_id', sa.String(length=ID_LEN), nullable=False),
+        sa.Column('exclusion_type', sa.String(length=32), nullable=False),
         sa.Column('exclusion_start_date', sa.DateTime, nullable=False),
         sa.Column('exclusion_end_date', sa.DateTime, nullable=False),
-        sa.Column('created_by', sa.String(256), nullable=False),
+        sa.Column('created_by', sa.String(length=256), nullable=False),
         sa.Column('created_on', sa.DateTime, nullable=False),
         sa.PrimaryKeyConstraint('id'),
     )
