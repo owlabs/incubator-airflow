@@ -662,6 +662,14 @@ class TaskExclusionTest(unittest.TestCase):
                         TaskExclusion.exclusion_end_date == exec_date,
                         TaskExclusion.created_by == 'airflow').first()
 
+        debug = self.session.query(TaskExclusion).all()
+
+        print('tables:')
+        print(self.session.metadata.tables.keys())
+
+        print('debug:')
+        print(debug)
+
         self.assertTrue(exclusion)
 
     def test_remove_exclusion(self):
