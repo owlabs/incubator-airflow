@@ -42,8 +42,7 @@ def upgrade():
         sa.Column('exclusion_end_date', sa.DateTime(), nullable=False),
         sa.Column('created_by', sa.String(length=256), nullable=False),
         sa.Column('created_on', sa.DateTime(), nullable=False),
-        sa.PrimaryKeyConstraint('id'),
-    )
+        sa.PrimaryKeyConstraint('id'))
 
 
 def downgrade():
