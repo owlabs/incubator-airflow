@@ -651,8 +651,7 @@ class TaskExclusionTest(unittest.TestCase):
                           exclusion_type=TaskExclusionType.SINGLE_DATE,
                           exclusion_start_date=exec_date,
                           exclusion_end_date=exec_date,
-                          created_by='airflow',
-                          session=self.session)
+                          created_by='airflow')
 
         exclusion = self.session.query(TaskExclusion).filter(
                         TaskExclusion.dag_id == dag_id,
@@ -686,8 +685,7 @@ class TaskExclusionTest(unittest.TestCase):
                              task_id=task_id,
                              exclusion_type=TaskExclusionType.SINGLE_DATE,
                              exclusion_start_date=exec_date,
-                             exclusion_end_date=exec_date,
-                             session=self.session())
+                             exclusion_end_date=exec_date)
 
         exclusion = self.session.query(TaskExclusion).filter(
                         TaskExclusion.dag_id == dag_id,
