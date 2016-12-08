@@ -655,12 +655,25 @@ class TaskExclusionTest(unittest.TestCase):
 
         exclusion = self.session.query(TaskExclusion).filter(
                         TaskExclusion.dag_id == dag_id,
-                        TaskExclusion.task_id == task_id).first()
+                        TaskExclusion.task_id == task_id,
+                        TaskExclusion.exclusion_type == TaskExclusionType.SINGLE_DATE).first()
 
         debug = self.session.query(TaskExclusion).all()
 
+        exclusion_type = self.session.query(TaskExclusion).first().excluson_type
+        exclusion_start_date = self.session.query(TaskExclusion).first().exclusion_start_date
+
         print('debug:')
         print(debug)
+
+        print('exclusion_type:')
+        print(exclusion_type)
+
+        print('exclusion_start_date:')
+        print(exclusion_start_date)
+
+        print('exec_date')
+        print(exec_date)
 
         self.assertTrue(exclusion)
 
