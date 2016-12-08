@@ -644,7 +644,7 @@ class TaskExclusionTest(unittest.TestCase):
     def test_set_exclusion(self):
         dag_id = 'test_task_exclude'
         task_id = 'test_task_exclude'
-        exec_date = datetime.datetime.now()
+        exec_date = datetime.now().replace(microsecond=0)
 
         TaskExclusion.set(dag_id=dag_id,
                           task_id=task_id,
