@@ -14,6 +14,7 @@
 import unittest
 
 from datetime import datetime
+from urllib.parse import quote
 
 import json
 
@@ -59,4 +60,31 @@ class ApiExperimentalTests(unittest.TestCase):
         )
         self.assertEqual(404, response.status_code)
 
+    def test_trigger_dag_for_date(self):
+        url_template = '/api/experimental/dags/{}/dag_runs/{}'
+        datetime_string = datetime.now().replace(microsecond=0).isoformat()
 
+        # Test Correct execution
+        response = self.app.post(
+            quote(url_template.format('example_bash_operator',datetime_string)),
+            data=json.dumps(dict(run_id='my_run'.format(datetime_string))),
+            content_type="application/json"
+        )
+        self.assertEqual(200, response.status_code)
+
+        # Test error for nonexistent dag
+        response = self.app.post(
+            quote(url_template.format('does_not_exist_dag',datetime_string)),
+            data=json.dumps(dict()),
+            content_type="application/json"
+        )
+        self.assertEqual(404, response.status_code)
+
+        # Test error for bad datetime format
+        response = self.app.post(
+            quote(
+                url_template.format('example_bash_operator', 'not_a_datetime')),
+            data=json.dumps(dict(run_id='my_run'.format(datetime_string))),
+            content_type="application/json"
+        )
+        self.assertEqual(400, response.status_code)
