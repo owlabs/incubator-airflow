@@ -658,8 +658,8 @@ class TaskExclusionTest(unittest.TestCase):
         print('exec_date')
         print(exec_date)
 
-        print('exclusion')
-        print(exclusion)
+        print('exclusion.exclusion_start_date')
+        print(exclusion.exclusion_start_date)
 
         self.assertTrue(exclusion.dag_id == dag_id)
         self.assertTrue(exclusion.task_id == task_id)
