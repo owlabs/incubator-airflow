@@ -664,9 +664,6 @@ class TaskExclusionTest(unittest.TestCase):
 
         debug = self.session.query(TaskExclusion).all()
 
-        print('tables:')
-        print(self.session.metadata.tables.keys())
-
         print('debug:')
         print(debug)
 
