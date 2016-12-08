@@ -655,12 +655,7 @@ class TaskExclusionTest(unittest.TestCase):
 
         exclusion = self.session.query(TaskExclusion).filter(
                         TaskExclusion.dag_id == dag_id,
-                        TaskExclusion.task_id == task_id,
-                        TaskExclusion.exclusion_type ==
-                        TaskExclusionType.SINGLE_DATE,
-                        TaskExclusion.exclusion_start_date == exec_date,
-                        TaskExclusion.exclusion_end_date == exec_date,
-                        TaskExclusion.created_by == 'airflow').first()
+                        TaskExclusion.task_id == task_id).first()
 
         debug = self.session.query(TaskExclusion).all()
 
