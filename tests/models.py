@@ -655,6 +655,12 @@ class TaskExclusionTest(unittest.TestCase):
 
         exclusion = self.session.query(TaskExclusion).first()
 
+        print('exec_date')
+        print(exec_date)
+
+        print('exclusion.exclusion_start_date')
+        print(exclusion.exclusion_start_date)
+
         self.assertTrue(exclusion.dag_id == dag_id)
         self.assertTrue(exclusion.task_id == task_id)
         self.assertTrue(exclusion.exclusion_type ==
@@ -666,7 +672,7 @@ class TaskExclusionTest(unittest.TestCase):
     def test_remove_exclusion(self):
         dag_id = 'test_task_exclude'
         task_id = 'test_task_exclude'
-        exec_date = datetime.datetime.now()
+        exec_date = datetime.now().replace(microsecond=0)
 
         self.session.add(TaskExclusion(
             dag_id=dag_id,
