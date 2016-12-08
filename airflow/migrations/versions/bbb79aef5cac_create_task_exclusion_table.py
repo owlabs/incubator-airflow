@@ -28,15 +28,12 @@ depends_on = None
 from alembic import op
 import sqlalchemy as sa
 
-ID_LEN = 250
-
-
 def upgrade():
     op.create_table(
         'task_exclusion',
         sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('dag_id', sa.String(length=ID_LEN), nullable=False),
-        sa.Column('task_id', sa.String(length=ID_LEN), nullable=False),
+        sa.Column('dag_id', sa.String(length=250), nullable=False),
+        sa.Column('task_id', sa.String(length=250), nullable=False),
         sa.Column('exclusion_type', sa.String(length=32), nullable=False),
         sa.Column('exclusion_start_date', sa.DateTime(), nullable=False),
         sa.Column('exclusion_end_date', sa.DateTime(), nullable=False),
