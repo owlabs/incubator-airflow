@@ -15,6 +15,7 @@ import unittest
 
 from datetime import datetime
 from urllib.parse import quote
+from airflow.api.common.experimental.trigger_dag import trigger_dag
 
 import json
 
@@ -62,11 +63,12 @@ class ApiExperimentalTests(unittest.TestCase):
 
     def test_trigger_dag_for_date(self):
         url_template = '/api/experimental/dags/{}/dag_runs/{}'
+        dag_id = 'example_bash_operator'
         datetime_string = datetime.now().replace(microsecond=0).isoformat()
 
         # Test Correct execution
         response = self.app.post(
-            quote(url_template.format('example_bash_operator',datetime_string)),
+            quote(url_template.format(dag_id, datetime_string)),
             data=json.dumps(dict(run_id='my_run'.format(datetime_string))),
             content_type="application/json"
         )
@@ -74,7 +76,7 @@ class ApiExperimentalTests(unittest.TestCase):
 
         # Test error for nonexistent dag
         response = self.app.post(
-            quote(url_template.format('does_not_exist_dag',datetime_string)),
+            quote(url_template.format('does_not_exist_dag', datetime_string)),
             data=json.dumps(dict()),
             content_type="application/json"
         )
@@ -83,8 +85,59 @@ class ApiExperimentalTests(unittest.TestCase):
         # Test error for bad datetime format
         response = self.app.post(
             quote(
-                url_template.format('example_bash_operator', 'not_a_datetime')),
+                url_template.format(dag_id, 'not_a_datetime')),
             data=json.dumps(dict(run_id='my_run'.format(datetime_string))),
             content_type="application/json"
         )
         self.assertEqual(400, response.status_code)
+
+    def test_task_instance_info(self):
+        url_template = '/api/experimental/dags/{}/tasks/{}/instances/{}'
+        dag_id = 'example_bash_operator'
+        task_id = 'also_run_this'
+        execution_date = datetime.now().replace(microsecond=0)
+        datetime_string = execution_date.isoformat()
+        wrong_datetime_string = datetime(1990, 1, 1, 1, 1, 1).isoformat()
+
+        # Create DagRun
+        trigger_dag(dag_id=dag_id,
+                    run_id='test_task_instance_info_run',
+                    execution_date=execution_date)
+
+        # Test Correct execution
+        response = self.app.get(
+            quote(url_template.format(dag_id, task_id, datetime_string))
+        )
+        self.assertEqual(200, response.status_code)
+
+        # Test error for nonexistent dag
+        response = self.app.get(
+            quote(url_template.format('does_not_exist_dag',
+                                      task_id,
+                                      datetime_string))
+        )
+        self.assertEqual(404, response.status_code)
+
+        # Test error for nonexistent task
+        response = self.app.get(
+            quote(url_template.format(dag_id,
+                                      'does_not_exist_task',
+                                      datetime_string))
+        )
+        self.assertEqual(404, response.status_code)
+
+        # Test error for nonexistent dag run (wrong execution_date)
+        response = self.app.get(
+            quote(url_template.format(dag_id,
+                                      task_id,
+                                      wrong_datetime_string))
+        )
+        self.assertEqual(404, response.status_code)
+
+        # Test error for bad datetime format
+        response = self.app.get(
+            quote(
+                url_template.format(dag_id, task_id, 'not_a_datetime'))
+        )
+        self.assertEqual(400, response.status_code)
+
