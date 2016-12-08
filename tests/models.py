@@ -653,15 +653,15 @@ class TaskExclusionTest(unittest.TestCase):
                           exclusion_end_date=exec_date,
                           created_by='airflow')
 
-        exclusion = self.session.query(TaskExclusion).first()
+        exclusion = self.session.query(TaskExclusion).all()
 
-        self.assertTrue(exclusion.dag_id == dag_id)
-        self.assertTrue(exclusion.task_id == task_id)
-        self.assertTrue(exclusion.exclusion_type ==
+        self.assertTrue(exclusion[0].dag_id == dag_id)
+        self.assertTrue(exclusion[0].task_id == task_id)
+        self.assertTrue(exclusion[0].exclusion_type ==
                         TaskExclusionType.SINGLE_DATE)
-        self.assertTrue(exclusion.exclusion_start_date == exec_date)
-        self.assertTrue(exclusion.exclusion_end_date == exec_date)
-        self.assertTrue(exclusion.created_by == 'airflow')
+        self.assertTrue(exclusion[0].exclusion_start_date == exec_date)
+        self.assertTrue(exclusion[0].exclusion_end_date == exec_date)
+        self.assertTrue(exclusion[0].created_by == 'airflow')
 
     def test_remove_exclusion(self):
         dag_id = 'test_task_exclude'
