@@ -16,6 +16,7 @@ import unittest
 from datetime import datetime
 from urllib.parse import quote
 from airflow.api.common.experimental.trigger_dag import trigger_dag
+from airflow.models import XCom, DagBag
 
 import json
 
@@ -64,7 +65,8 @@ class ApiExperimentalTests(unittest.TestCase):
     def test_trigger_dag_for_date(self):
         url_template = '/api/experimental/dags/{}/dag_runs/{}'
         dag_id = 'example_bash_operator'
-        datetime_string = datetime.now().replace(microsecond=0).isoformat()
+        execution_date = datetime.now().replace(microsecond=0)
+        datetime_string = execution_date.isoformat()
 
         # Test Correct execution
         response = self.app.post(
@@ -73,6 +75,13 @@ class ApiExperimentalTests(unittest.TestCase):
             content_type="application/json"
         )
         self.assertEqual(200, response.status_code)
+
+        dagbag = DagBag()
+        dag = dagbag.get_dag(dag_id)
+        dag_run = dag.get_dagrun(execution_date)
+        self.assertTrue(dag_run,
+                        'Dag Run not found for execution date {}'
+                        .format(execution_date))
 
         # Test error for nonexistent dag
         response = self.app.post(
@@ -109,6 +118,8 @@ class ApiExperimentalTests(unittest.TestCase):
             quote(url_template.format(dag_id, task_id, datetime_string))
         )
         self.assertEqual(200, response.status_code)
+        assert 'state' in response.data.decode('utf-8')
+        assert 'error' not in response.data.decode('utf-8')        
 
         # Test error for nonexistent dag
         response = self.app.get(
@@ -141,3 +152,52 @@ class ApiExperimentalTests(unittest.TestCase):
         )
         self.assertEqual(400, response.status_code)
 
+    def test_write_xcom(self):
+        url_template = ('/api/experimental/dags/{}/tasks/{}'
+                        '/instances/{}/xcom/{}/{}')
+        dag_id = 'example_bash_operator'
+        task_id = 'xcom_task'
+        key = 'xcom_key'
+        value = 'xcom_value'
+        execution_date = datetime.now().replace(microsecond=0)
+        datetime_string = execution_date.isoformat()
+
+        # Test Correct execution
+        response = self.app.post(
+            quote(url_template.format(dag_id,
+                                      task_id,
+                                      datetime_string,
+                                      key,
+                                      value))
+        )
+        self.assertEqual(200, response.status_code)
+        
+        # Check xcom value in database
+        xcom_value = XCom.get_one(execution_date=execution_date,
+                                  key=key,
+                                  task_id=task_id,
+                                  dag_id=dag_id)
+        self.assertEqual(value,
+                         xcom_value,
+                         'XCom value: expected {}, found {}'.format(value,
+                                                                    xcom_value))
+
+        # Test error for nonexistent dag
+        response = self.app.post(
+            quote(url_template.format('does_not_exist_dag',
+                                      task_id,
+                                      datetime_string,
+                                      key,
+                                      value))
+        )
+        self.assertEqual(404, response.status_code)
+
+        # Test error for bad datetime format
+        response = self.app.post(
+            quote(url_template.format(dag_id,
+                                      task_id,
+                                      'not_a_datetime',
+                                      key,
+                                      value))
+        )
+        self.assertEqual(400, response.status_code)
