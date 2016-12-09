@@ -635,13 +635,13 @@ class TaskExclusionTest(unittest.TestCase):
 
     def SetUp(self):
         # Obtain all exclusions
-        self.exclusions = models.TaskExclusion.query.all()
+        self.exclusions = self.session.query(TaskExclusion).all()
         # Clear the exclusions
-        models.TaskExclusion.query.delete()
+        self.session.query(TaskExclusion).delete()
         self.session.commit()
 
     def TearDown(self):
-        models.TaskExclusion.query.add(self.exclusions)
+        self.session.query(TaskExclusion).add(self.exclusions)
         self.session.commit()
 
     def test_set_exclusion(self):
