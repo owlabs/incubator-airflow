@@ -600,6 +600,35 @@ class SchedulerJobTest(unittest.TestCase):
         tis = dr.get_task_instances()
         self.assertEquals(len(tis), 2)
 
+    def test_excluded_task(self):
+        """
+        Test if a task instance is set to excluded if
+        """
+        dag = DAG(
+            dag_id='test_scheduler_add_new_task',
+            start_date=DEFAULT_DATE)
+
+        dag_task1 = DummyOperator(
+            task_id='dummy',
+            dag=dag,
+            owner='airflow')
+
+        session = settings.Session()
+        orm_dag = DagModel(dag_id=dag.dag_id)
+        session.merge(orm_dag)
+        session.commit()
+        session.close()
+
+        scheduler = SchedulerJob()
+        dag.clear()
+
+        dr = scheduler.create_dag_run(dag)
+        self.assertIsNotNone(dr)
+
+        tis = dr.get_task_instances()
+
+        self.assertEquals(tis[0].state, State.EXCLUDED)
+
     def test_scheduler_verify_max_active_runs(self):
         """
         Test if a a dagrun will not be scheduled if max_dag_runs has been reached
