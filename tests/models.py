@@ -665,9 +665,11 @@ class TaskExclusionTest(unittest.TestCase):
         self.assertEqual(exclusion.exclusion_type,
                          TaskExclusionType.SINGLE_DATE)
         self.assertEqual(exclusion.exclusion_start_datedatetime.strftime(
-            '%Y-%m-%d %H:%M:%S'), self.exec_date)
+            '%Y-%m-%d %H:%M:%S'), self.exec_date.strftime(
+            '%Y-%m-%d %H:%M:%S'))
         self.assertEqual(exclusion.exclusion_start_datedatetime.strftime(
-            '%Y-%m-%d %H:%M:%S'), self.exec_date)
+            '%Y-%m-%d %H:%M:%S'), self.exec_date.strftime(
+            '%Y-%m-%d %H:%M:%S'))
         self.assertEqual(exclusion.created_by, 'airflow')
 
     def test_remove_exclusion(self):
