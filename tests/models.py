@@ -631,7 +631,7 @@ class TaskExclusionTest(unittest.TestCase):
     exec_date = datetime.datetime(2016, 1, 1, 1, 1, 1, 111111)
     dag_id = 'test_task_exclude'
     task_id = 'test_task_exclude'
-
+    exclusions = session.query(TaskExclusion).all()
 
     def SetUp(self):
         # Obtain all exclusions
@@ -697,7 +697,7 @@ class TaskExclusionTest(unittest.TestCase):
         TaskExclusion.remove(dag_id=self.dag_id,
                              task_id=self.task_id,
                              exclusion_type=TaskExclusionType.SINGLE_DATE,
-                             exclusion_start_date=self.exec_date,
+                             exclusion_start_date=exclusion.exclusion_start_date,
                              exclusion_end_date=self.exec_date)
 
         exclusion = self.session.query(TaskExclusion).first()
@@ -717,10 +717,12 @@ class TaskExclusionTest(unittest.TestCase):
 
         self.session.commit()
 
+        exclusion = self.session.query(TaskExclusion).first()
+
         self.assertTrue(TaskExclusion.should_exclude_task(
-                                          dag_id=self.dag_id,
-                                          task_id=self.task_id,
-                                          execution_date=self.exec_date))
+                              dag_id=self.dag_id,
+                              task_id=self.task_id,
+                              execution_date=exclusion.exclusion_start_date))
 
     def test_should_not_exclude_task(self):
         self.session.query(TaskExclusion).delete()
