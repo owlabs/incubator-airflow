@@ -628,7 +628,7 @@ class TaskInstanceTest(unittest.TestCase):
 
 class TaskExclusionTest(unittest.TestCase):
     session = settings.Session()
-    exec_date = datetime.datetime(2016, 1, 1, 1, 1, 111111)
+    exec_date = datetime.datetime(2016, 1, 1, 1, 1,1, 111111)
 
     def SetUp(self):
         # Obtain all exclusions
