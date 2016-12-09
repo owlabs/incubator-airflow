@@ -664,10 +664,10 @@ class TaskExclusionTest(unittest.TestCase):
         self.assertEqual(exclusion.task_id,task_id)
         self.assertEqual(exclusion.exclusion_type,
                          TaskExclusionType.SINGLE_DATE)
-        self.assertEqual(exclusion.exclusion_start_datedatetime.strftime(
+        self.assertEqual(exclusion.exclusion_start_date.datetime.strftime(
             '%Y-%m-%d %H:%M:%S'), self.exec_date.strftime(
             '%Y-%m-%d %H:%M:%S'))
-        self.assertEqual(exclusion.exclusion_start_datedatetime.strftime(
+        self.assertEqual(exclusion.exclusion_start_date.datetime.strftime(
             '%Y-%m-%d %H:%M:%S'), self.exec_date.strftime(
             '%Y-%m-%d %H:%M:%S'))
         self.assertEqual(exclusion.created_by, 'airflow')

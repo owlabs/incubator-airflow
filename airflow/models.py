@@ -4089,10 +4089,10 @@ class TaskExclusion(Base):
     dag_id = Column(String(ID_LEN), nullable=False)
     task_id = Column(String(ID_LEN), nullable=False)
     exclusion_type = Column(String(32), nullable=False)
-    exclusion_start_date = Column(DateTime, nullable=True)
-    exclusion_end_date = Column(DateTime, nullable=True)
+    exclusion_start_date = Column(DateTime(), nullable=True)
+    exclusion_end_date = Column(DateTime(), nullable=True)
     created_by = Column(String(256), nullable=False)
-    created_on = Column(DateTime, nullable=False)
+    created_on = Column(DateTime(), nullable=False)
 
     @classmethod
     @provide_session
