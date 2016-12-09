@@ -723,6 +723,8 @@ class TaskExclusionTest(unittest.TestCase):
                                           execution_date=self.exec_date))
 
     def test_should_not_exclude_task(self):
+        self.session.query(TaskExclusion).delete()
+        self.session.commit()
         should_exclude = TaskExclusion.should_exclude_task(
             dag_id=self.dag_id,
             task_id=self.task_id,
