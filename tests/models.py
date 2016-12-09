@@ -639,6 +639,7 @@ class TaskExclusionTest(unittest.TestCase):
         # Clear the exclusions
         self.session.query(TaskExclusion).delete()
         self.session.commit()
+        self.session.expunge_all()
 
     def TearDown(self):
         self.session.query(TaskExclusion).add(self.exclusions)
@@ -722,7 +723,11 @@ class TaskExclusionTest(unittest.TestCase):
                                           execution_date=self.exec_date))
 
     def test_should_not_exclude_task(self):
-        self.assertFalse(TaskExclusion.should_exclude_task(
-                                          dag_id=self.dag_id,
-                                          task_id=self.task_id,
-                                          execution_date=self.exec_date))
+        should_exclude = TaskExclusion.should_exclude_task(
+            dag_id=self.dag_id,
+            task_id=self.task_id,
+            execution_date=self.exec_date)
+
+        print(should_exclude)
+
+        self.assertFalse(should_exclude)
