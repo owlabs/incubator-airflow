@@ -600,12 +600,9 @@ class SchedulerJobTest(unittest.TestCase):
         tis = dr.get_task_instances()
         self.assertEquals(len(tis), 2)
 
-    def test_excluded_task(self):
-        """
-        Test if a task instance is set to excluded if
-        """
+    def test_scheduler_does_not_run_excluded(self):
         dag = DAG(
-            dag_id='test_excluded',
+            dag_id='test_scheduler_do_not_run_finished',
             start_date=DEFAULT_DATE)
         dag_task1 = DummyOperator(
             task_id='dummy',
@@ -624,17 +621,16 @@ class SchedulerJobTest(unittest.TestCase):
         self.assertIsNotNone(dr)
 
         tis = dr.get_task_instances(session=session)
+        for ti in tis:
+            ti.state = State.EXCLUDED
 
         session.commit()
-
         session.close()
 
         queue = mock.Mock()
         scheduler._process_task_instances(dag, queue=queue)
 
         queue.put.assert_not_called()
-
-        self.assertEquals(tis[0].state, State.EXCLUDED)
 
     def test_scheduler_verify_max_active_runs(self):
         """
