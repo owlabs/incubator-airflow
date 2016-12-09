@@ -728,3 +728,10 @@ class TaskExclusionTest(unittest.TestCase):
                                           task_id=self.task_id,
                                           execution_date=self.exec_date))
 
+
+    def test_should_not_exclude_task(self):
+
+        self.assertFalse(TaskExclusion.should_exclude_task(
+                                          dag_id=self.dag_id,
+                                          task_id=self.task_id,
+                                          execution_date=self.exec_date))
