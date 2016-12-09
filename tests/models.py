@@ -698,7 +698,7 @@ class TaskExclusionTest(unittest.TestCase):
                              task_id=self.task_id,
                              exclusion_type=TaskExclusionType.SINGLE_DATE,
                              exclusion_start_date=exclusion.exclusion_start_date,
-                             exclusion_end_date=self.exclusion.exclusion_end_date)
+                             exclusion_end_date=exclusion.exclusion_end_date)
 
         exclusion = self.session.query(TaskExclusion).first()
 
