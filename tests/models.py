@@ -36,7 +36,6 @@ from mock import patch
 from nose_parameterized import parameterized
 
 
-
 DEFAULT_DATE = datetime.datetime(2016, 1, 1)
 TEST_DAGS_FOLDER = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), 'dags')
@@ -629,8 +628,7 @@ class TaskInstanceTest(unittest.TestCase):
 
 class TaskExclusionTest(unittest.TestCase):
     session = settings.Session()
-    exec_date = datetime.datetime(2016, 1, 1)
-
+    exec_date = datetime.datetime(2016, 1, 1, 1, 1, 111111)
 
     def SetUp(self):
         # Obtain all exclusions
@@ -662,13 +660,15 @@ class TaskExclusionTest(unittest.TestCase):
         print('exclusion.exclusion_start_date')
         print(exclusion.exclusion_start_date)
 
-        self.assertTrue(exclusion.dag_id == dag_id)
-        self.assertTrue(exclusion.task_id == task_id)
-        self.assertTrue(exclusion.exclusion_type ==
-                        TaskExclusionType.SINGLE_DATE)
-        self.assertTrue(exclusion.exclusion_start_date == self.exec_date)
-        self.assertTrue(exclusion.exclusion_end_date == self.exec_date)
-        self.assertTrue(exclusion.created_by == 'airflow')
+        self.assertEqual(exclusion.dag_id, dag_id)
+        self.assertEqual(exclusion.task_id,task_id)
+        self.assertEqual(exclusion.exclusion_type,
+                         TaskExclusionType.SINGLE_DATE)
+        self.assertEqual(exclusion.exclusion_start_datedatetime.strftime(
+            '%Y-%m-%d %H:%M:%S'), self.exec_date)
+        self.assertEqual(exclusion.exclusion_start_datedatetime.strftime(
+            '%Y-%m-%d %H:%M:%S'), self.exec_date)
+        self.assertEqual(exclusion.created_by, 'airflow')
 
     def test_remove_exclusion(self):
         dag_id = 'test_task_exclude'
