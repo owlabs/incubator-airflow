@@ -721,6 +721,10 @@ class TaskExclusionTest(unittest.TestCase):
             created_on=self.exec_date)
         )
 
-        self.assertTrue(TaskExclusion.should_exclude_task(dag_id=self.dag_id,
+        self.session.commit()
+
+        self.assertTrue(TaskExclusion.should_exclude_task(
+                                          dag_id=self.dag_id,
                                           task_id=self.task_id,
                                           execution_date=self.exec_date))
+
