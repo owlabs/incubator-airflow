@@ -644,6 +644,7 @@ class TaskExclusionTest(unittest.TestCase):
     def TearDown(self):
         self.session.query(TaskExclusion).add(self.exclusions)
         self.session.commit()
+        self.session.expunge_all()
 
     def test_set_exclusion(self):
 
@@ -652,7 +653,8 @@ class TaskExclusionTest(unittest.TestCase):
                           exclusion_type=TaskExclusionType.SINGLE_DATE,
                           exclusion_start_date=self.exec_date,
                           exclusion_end_date=self.exec_date,
-                          created_by='airflow')
+                          created_by='airflow',
+                          session=self.session)
 
         exclusion = self.session.query(TaskExclusion).first()
 
