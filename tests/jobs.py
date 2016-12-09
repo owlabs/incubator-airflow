@@ -605,9 +605,8 @@ class SchedulerJobTest(unittest.TestCase):
         Test if a task instance is set to excluded if
         """
         dag = DAG(
-            dag_id='test_scheduler_add_new_task',
+            dag_id='test_excluded',
             start_date=DEFAULT_DATE)
-
         dag_task1 = DummyOperator(
             task_id='dummy',
             dag=dag,
@@ -617,7 +616,6 @@ class SchedulerJobTest(unittest.TestCase):
         orm_dag = DagModel(dag_id=dag.dag_id)
         session.merge(orm_dag)
         session.commit()
-        session.close()
 
         scheduler = SchedulerJob()
         dag.clear()
@@ -625,7 +623,16 @@ class SchedulerJobTest(unittest.TestCase):
         dr = scheduler.create_dag_run(dag)
         self.assertIsNotNone(dr)
 
-        tis = dr.get_task_instances()
+        tis = dr.get_task_instances(session=session)
+
+        session.commit()
+
+        session.close()
+
+        queue = mock.Mock()
+        scheduler._process_task_instances(dag, queue=queue)
+
+        queue.put.assert_not_called()
 
         self.assertEquals(tis[0].state, State.EXCLUDED)
 
