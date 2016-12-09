@@ -628,7 +628,10 @@ class TaskInstanceTest(unittest.TestCase):
 
 class TaskExclusionTest(unittest.TestCase):
     session = settings.Session()
-    exec_date = datetime.datetime(2016, 1, 1, 1, 1,1, 111111)
+    exec_date = datetime.datetime(2016, 1, 1, 1, 1, 1, 111111)
+    dag_id = 'test_task_exclude'
+    task_id = 'test_task_exclude'
+
 
     def SetUp(self):
         # Obtain all exclusions
@@ -642,11 +645,9 @@ class TaskExclusionTest(unittest.TestCase):
         self.session.commit()
 
     def test_set_exclusion(self):
-        dag_id = 'test_task_exclude'
-        task_id = 'test_task_exclude'
 
-        TaskExclusion.set(dag_id=dag_id,
-                          task_id=task_id,
+        TaskExclusion.set(dag_id=self.dag_id,
+                          task_id=self.task_id,
                           exclusion_type=TaskExclusionType.SINGLE_DATE,
                           exclusion_start_date=self.exec_date,
                           exclusion_end_date=self.exec_date,
@@ -660,8 +661,11 @@ class TaskExclusionTest(unittest.TestCase):
         print('exclusion.exclusion_start_date')
         print(exclusion.exclusion_start_date)
 
-        self.assertEqual(exclusion.dag_id, dag_id)
-        self.assertEqual(exclusion.task_id,task_id)
+        # For the datetime tests, it is necessary to strip the microseconds
+        # for comparison as the microseconds get stripped when SQLAlchemy
+        # inserts the data into a MySQL database.
+        self.assertEqual(exclusion.dag_id, self.dag_id)
+        self.assertEqual(exclusion.task_id, self.task_id)
         self.assertEqual(exclusion.exclusion_type,
                          TaskExclusionType.SINGLE_DATE)
         self.assertEqual(exclusion.exclusion_start_date.strftime(
@@ -673,11 +677,9 @@ class TaskExclusionTest(unittest.TestCase):
         self.assertEqual(exclusion.created_by, 'airflow')
 
     def test_remove_exclusion(self):
-        dag_id = 'test_task_exclude'
-        task_id = 'test_task_exclude'
         self.session.add(TaskExclusion(
-            dag_id=dag_id,
-            task_id=task_id,
+            dag_id=self.dag_id,
+            task_id=self.task_id,
             exclusion_type=TaskExclusionType.SINGLE_DATE,
             exclusion_start_date=self.exec_date,
             exclusion_end_date=self.exec_date,
@@ -687,19 +689,38 @@ class TaskExclusionTest(unittest.TestCase):
 
         self.session.commit()
 
-        TaskExclusion.remove(dag_id=dag_id,
-                             task_id=task_id,
+        TaskExclusion.remove(dag_id=self.dag_id,
+                             task_id=self.task_id,
                              exclusion_type=TaskExclusionType.SINGLE_DATE,
                              exclusion_start_date=self.exec_date,
                              exclusion_end_date=self.exec_date)
 
         exclusion = self.session.query(TaskExclusion).filter(
-                        TaskExclusion.dag_id == dag_id,
-                        TaskExclusion.task_id == task_id,
+                        TaskExclusion.dag_id == self.dag_id,
+                        TaskExclusion.task_id == self.task_id,
                         TaskExclusion.exclusion_type ==
                         TaskExclusionType.SINGLE_DATE,
-                        TaskExclusion.exclusion_start_date == self.exec_date,
-                        TaskExclusion.exclusion_end_date == self.exec_date,
+                        TaskExclusion.exclusion_start_date.strftime(
+                            '%Y-%m-%d %H:%M:%S') == self.exec_date.strftime(
+                            '%Y-%m-%d %H:%M:%S'),
+                        TaskExclusion.exclusion_end_date.strftime(
+                            '%Y-%m-%d %H:%M:%S') == self.exec_date.strftime(
+                            '%Y-%m-%d %H:%M:%S'),
                         TaskExclusion.created_by == 'airflow').first()
 
         self.assertFalse(exclusion)
+
+    def test_should_exclude_task(self):
+        self.session.add(TaskExclusion(
+            dag_id=self.dag_id,
+            task_id=self.task_id,
+            exclusion_type=TaskExclusionType.SINGLE_DATE,
+            exclusion_start_date=self.exec_date,
+            exclusion_end_date=self.exec_date,
+            created_by='airflow',
+            created_on=self.exec_date)
+        )
+
+        self.assertTrue(TaskExclusion.should_exclude_task(dag_id=self.dag_id,
+                                          task_id=self.task_id,
+                                          execution_date=self.exec_date))
