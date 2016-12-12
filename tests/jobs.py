@@ -602,7 +602,7 @@ class SchedulerJobTest(unittest.TestCase):
 
     def test_scheduler_does_not_run_excluded(self):
         dag = DAG(
-            dag_id='test_scheduler_do_not_run_finished',
+            dag_id='test_scheduler_does_not_run_excluded',
             start_date=DEFAULT_DATE)
         dag_task1 = DummyOperator(
             task_id='dummy',
