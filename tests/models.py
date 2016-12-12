@@ -658,15 +658,6 @@ class TaskExclusionTest(unittest.TestCase):
 
         exclusion = self.session.query(TaskExclusion).first()
 
-        print('exec_date')
-        print(self.exec_date)
-
-        print('exclusion.exclusion_start_date')
-        print(exclusion.exclusion_start_date)
-
-        # For the datetime tests, it is necessary to strip the microseconds
-        # for comparison as the microseconds get stripped when SQLAlchemy
-        # inserts the data into a MySQL database.
         self.assertEqual(exclusion.dag_id, self.dag_id)
         self.assertEqual(exclusion.task_id, self.task_id)
         self.assertEqual(exclusion.exclusion_type,
@@ -728,7 +719,5 @@ class TaskExclusionTest(unittest.TestCase):
             dag_id=self.dag_id,
             task_id=self.task_id,
             execution_date=self.exec_date)
-
-        print(should_exclude)
 
         self.assertFalse(should_exclude)
