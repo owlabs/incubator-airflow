@@ -642,6 +642,7 @@ class TaskExclusionTest(unittest.TestCase):
         self.session.expunge_all()
 
     def TearDown(self):
+        self.session.query(TaskExclusion).delete()
         self.session.query(TaskExclusion).add(self.exclusions)
         self.session.commit()
         self.session.expunge_all()
