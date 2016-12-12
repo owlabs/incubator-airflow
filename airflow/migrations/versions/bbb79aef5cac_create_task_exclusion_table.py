@@ -29,6 +29,7 @@ from alembic import op, context
 import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
 
+
 def upgrade():
     if context.config.get_main_option('sqlalchemy.url').startswith('mysql'):
         op.create_table(
@@ -37,12 +38,12 @@ def upgrade():
             sa.Column('dag_id', sa.String(length=250), nullable=False),
             sa.Column('task_id', sa.String(length=250), nullable=False),
             sa.Column('exclusion_type', sa.String(length=32), nullable=False),
-            sa.Column('exclusion_start_date', mysql.DateTime(fsp=6),
+            sa.Column('exclusion_start_date', mysql.DATETIME(fsp=6),
                       nullable=False),
-            sa.Column('exclusion_end_date', mysql.DateTime(fsp=6),
+            sa.Column('exclusion_end_date', mysql.DATETIME(fsp=6),
                       nullable=False),
             sa.Column('created_by', sa.String(length=256), nullable=False),
-            sa.Column('created_on', mysql.DateTime(fsp=6), nullable=False),
+            sa.Column('created_on', mysql.DATETIME(fsp=6), nullable=False),
             sa.PrimaryKeyConstraint('id'))
     else:
         op.create_table(
