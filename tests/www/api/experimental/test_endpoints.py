@@ -65,7 +65,8 @@ class ApiExperimentalTests(unittest.TestCase):
     def test_trigger_dag_for_date(self):
         url_template = '/api/experimental/dags/{}/dag_runs/{}'
         dag_id = 'example_bash_operator'
-        execution_date = datetime.now().replace(microsecond=0)
+        now = datetime.now()
+        execution_date = datetime(now.year, now.month, now.day, now.hour + 1)
         datetime_string = execution_date.isoformat()
 
         # Test Correct execution
