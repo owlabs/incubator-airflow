@@ -15,7 +15,7 @@ import unittest
 
 from datetime import datetime, timedelta
 from airflow.api.common.experimental.trigger_dag import trigger_dag
-from airflow.models import DagBag
+from airflow.models import DagBag, XCom
 
 import json
 
@@ -165,6 +165,55 @@ class ApiExperimentalTests(unittest.TestCase):
         response = self.app.get(
             url_template.format(dag_id, task_id),
             data=json.dumps(dict(exec_date='not_a_datetime')),
+            content_type="application/json"
+        )
+        self.assertEqual(400, response.status_code)
+
+    def test_write_xcom(self):
+        url_template = ('/api/experimental/dags/{}/tasks/{}/xcom')
+        dag_id = 'example_bash_operator'
+        task_id = 'xcom_task'
+        key = 'xcom_key'
+        value = 'xcom_value'
+        execution_date = datetime.now().replace(microsecond=0)
+        datetime_string = execution_date.isoformat()
+
+        # Test Correct execution
+        response = self.app.post(
+            url_template.format(dag_id, task_id),
+            data=json.dumps(dict(exec_date=datetime_string,
+                                 key=key,
+                                 value=value)),
+            content_type="application/json"
+        )
+        self.assertEqual(200, response.status_code)
+        
+        # Check xcom value in database
+        xcom_value = XCom.get_one(execution_date=execution_date,
+                                  key=key,
+                                  task_id=task_id,
+                                  dag_id=dag_id)
+        self.assertEqual(value,
+                         xcom_value,
+                         'XCom value: expected {}, found {}'.format(value,
+                                                                    xcom_value))
+
+        # Test error for nonexistent dag
+        response = self.app.post(
+            url_template.format('does_not_exist_dag', task_id),
+            data=json.dumps(dict(exec_date=datetime_string,
+                                 key=key,
+                                 value=value)),
+            content_type="application/json"
+        )
+        self.assertEqual(404, response.status_code)
+
+        # Test error for bad datetime format
+        response = self.app.post(
+            url_template.format(dag_id, task_id),
+            data=json.dumps(dict(exec_date='not_a_datetime',
+                                 key=key,
+                                 value=value)),
             content_type="application/json"
         )
         self.assertEqual(400, response.status_code)
