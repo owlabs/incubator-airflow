@@ -14,6 +14,7 @@
 import unittest
 
 from datetime import datetime, timedelta
+from airflow.api.common.experimental.trigger_dag import trigger_dag
 from airflow.models import DagBag
 
 import json
@@ -30,16 +31,28 @@ class ApiExperimentalTests(unittest.TestCase):
     def test_task_info(self):
         url_template = '/api/experimental/dags/{}/tasks/{}'
 
-        response = self.app.get(url_template.format('example_bash_operator', 'runme_0'))
+        response = self.app.get(
+            url_template.format('example_bash_operator', 'runme_0'),
+            data=json.dumps(dict()),
+            content_type="application/json"
+        )
         assert '"email"' in response.data.decode('utf-8')
         assert 'error' not in response.data.decode('utf-8')
         self.assertEqual(200, response.status_code)
 
-        response = self.app.get(url_template.format('example_bash_operator', 'DNE'))
+        response = self.app.get(
+            url_template.format('example_bash_operator', 'DNE'),
+            data=json.dumps(dict()),
+            content_type="application/json"
+        )
         assert 'error' in response.data.decode('utf-8')
         self.assertEqual(404, response.status_code)
 
-        response = self.app.get(url_template.format('DNE', 'DNE'))
+        response = self.app.get(
+            url_template.format('DNE', 'DNE'),
+            data=json.dumps(dict()),
+            content_type="application/json"
+        )
         assert 'error' in response.data.decode('utf-8')
         self.assertEqual(404, response.status_code)
 
@@ -97,6 +110,61 @@ class ApiExperimentalTests(unittest.TestCase):
         response = self.app.post(
             url_template.format(dag_id),
             data=json.dumps(dict(execution_date='not_a_datetime')),
+            content_type="application/json"
+        )
+        self.assertEqual(400, response.status_code)
+
+    def test_task_instance_info(self):
+        url_template = '/api/experimental/dags/{}/tasks/{}'
+        dag_id = 'example_bash_operator'
+        task_id = 'also_run_this'
+        execution_date = datetime.now().replace(microsecond=0)
+        datetime_string = execution_date.isoformat()
+        wrong_datetime_string = datetime(1990, 1, 1, 1, 1, 1).isoformat()
+
+        # Create DagRun
+        trigger_dag(dag_id=dag_id,
+                    run_id='test_task_instance_info_run',
+                    execution_date=execution_date)
+
+        # Test Correct execution
+        response = self.app.get(
+            url_template.format(dag_id, task_id),
+            data=json.dumps(dict(exec_date=datetime_string)),
+            content_type="application/json"
+        )
+        self.assertEqual(200, response.status_code)
+        assert 'state' in response.data.decode('utf-8')
+        assert 'error' not in response.data.decode('utf-8')        
+
+        # Test error for nonexistent dag
+        response = self.app.get(
+            url_template.format('does_not_exist_dag', task_id),
+            data=json.dumps(dict(exec_date=datetime_string)),
+            content_type="application/json"
+        )
+        self.assertEqual(404, response.status_code)
+
+        # Test error for nonexistent task
+        response = self.app.get(
+            url_template.format(dag_id, 'does_not_exist_task'),
+            data=json.dumps(dict(exec_date=datetime_string)),
+            content_type="application/json"
+        )
+        self.assertEqual(404, response.status_code)
+
+        # Test error for nonexistent dag run (wrong execution_date)
+        response = self.app.get(
+            url_template.format(dag_id, task_id),
+            data=json.dumps(dict(exec_date=wrong_datetime_string)),
+            content_type="application/json"
+        )
+        self.assertEqual(404, response.status_code)
+
+        # Test error for bad datetime format
+        response = self.app.get(
+            url_template.format(dag_id, task_id),
+            data=json.dumps(dict(exec_date='not_a_datetime')),
             content_type="application/json"
         )
         self.assertEqual(400, response.status_code)

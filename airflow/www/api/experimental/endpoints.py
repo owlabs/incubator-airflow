@@ -16,6 +16,7 @@ import logging
 import airflow.api
 
 from airflow.api.common.experimental import trigger_dag as trigger
+from airflow.api.common.experimental.get_task_info import get_task_info
 from airflow.exceptions import AirflowException
 from airflow.www.app import csrf
 
@@ -92,21 +93,43 @@ def test():
 @api_experimental.route('/dags/<string:dag_id>/tasks/<string:task_id>', methods=['GET'])
 @requires_authentication
 def task_info(dag_id, task_id):
-    """Returns a JSON with a task's public instance variables. """
-    from airflow.www.views import dagbag
+    """
+    Returns a JSON with a task's public instance variables. If an exec_date is
+    passed in with the request JSON data, details of a task instance will be
+    returned instead. The format for the exec_date is expected to be
+    "YYYY-mm-DDTHH:MM:SS", for example: "2016-11-16T11:34:15".
+    """
 
-    if dag_id not in dagbag.dags:
-        response = jsonify(error='Dag {} not found'.format(dag_id))
+    data = request.get_json(force=True)
+    execution_date = None
+    if 'exec_date' in data:
+        execution_date = data['exec_date']
+
+        # Convert string datetime into actual datetime
+        try:
+            execution_date = datetime.strptime(execution_date,
+                                               '%Y-%m-%dT%H:%M:%S')
+        except ValueError:
+            error_message = (
+                'Given execution date, {}, could not be identified '
+                'as a date. Example date format: 2015-11-16T14:34:15'
+                .format(execution_date))
+            _log.info(error_message)
+            response = jsonify({'error': error_message})
+            response.status_code = 400
+
+            return response
+
+    try:
+        info = get_task_info(dag_id, task_id, execution_date)
+    except AirflowException as err:
+        _log.info(err)
+        response = jsonify(error="{}".format(err))
         response.status_code = 404
         return response
 
-    dag = dagbag.dags[dag_id]
-    if not dag.has_task(task_id):
-        response = (jsonify(error='Task {} not found in dag {}'
-                    .format(task_id, dag_id)))
-        response.status_code = 404
-        return response
-
-    task = dag.get_task(task_id)
-    fields = {k: str(v) for k, v in vars(task).items() if not k.startswith('_')}
+    # JSONify and return.
+    fields = {k: str(v)
+              for k, v in vars(info).items()
+              if not k.startswith('_')}
     return jsonify(fields)
