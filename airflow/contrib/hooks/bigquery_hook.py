@@ -18,20 +18,21 @@ This module contains a BigQuery Hook, as well as a very basic PEP 249
 implementation for BigQuery.
 """
 
-from builtins import range
-from past.builtins import basestring
-
 import logging
 import time
 
-from airflow.contrib.hooks.gcp_api_base_hook import GoogleCloudBaseHook
-from airflow.hooks.dbapi_hook import DbApiHook
 from apiclient.discovery import build, HttpError
+from googleapiclient import errors
+from builtins import range
 from pandas.io.gbq import GbqConnector, \
     _parse_data as gbq_parse_data, \
     _check_google_client_version as gbq_check_google_client_version, \
     _test_google_api_imports as gbq_test_google_api_imports
 from pandas.tools.merge import concat
+from past.builtins import basestring
+
+from airflow.contrib.hooks.gcp_api_base_hook import GoogleCloudBaseHook
+from airflow.hooks.dbapi_hook import DbApiHook
 
 logging.getLogger("bigquery").setLevel(logging.INFO)
 
@@ -100,6 +101,32 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook):
             return concat(dataframe_list, ignore_index=True)
         else:
             return gbq_parse_data(schema, [])
+
+    def table_exists(self, project_id, dataset_id, table_id):
+        """
+        Checks for the existence of a table in Google BigQuery.
+
+        :param project_id: The Google cloud project in which to look for the table. The connection supplied to the hook
+        must provide access to the specified project.
+        :type project_id: string
+        :param dataset_id: The name of the dataset in which to look for the table.
+            storage bucket.
+        :type dataset_id: string
+        :param table_id: The name of the table to check the existence of.
+        :type table_id: string
+        """
+        service = self.get_service()
+        try:
+            service.tables().get(
+                projectId=project_id,
+                datasetId=dataset_id,
+                tableId=table_id
+            ).execute()
+            return True
+        except errors.HttpError as e:
+            if e.resp['status'] == '404':
+                return False
+            raise
 
 
 class BigQueryPandasConnector(GbqConnector):
@@ -419,14 +446,15 @@ class BigQueryBaseCursor(object):
                     'datasetId': destination_dataset,
                     'tableId': destination_table,
                 },
-                'schema': {
-                    'fields': schema_fields
-                },
                 'sourceFormat': source_format,
                 'sourceUris': source_uris,
                 'writeDisposition': write_disposition,
             }
         }
+        if schema_fields:
+            configuration['load']['schema'] = {
+                'fields': schema_fields
+            }
 
         if schema_update_options:
             if write_disposition not in ["WRITE_APPEND", "WRITE_TRUNCATE"]:
@@ -491,12 +519,12 @@ class BigQueryBaseCursor(object):
                     time.sleep(5)
 
             except HttpError as err:
-                if err.code in [500, 503]:
-                    _log.info('%s: Retryable error, waiting for job to complete: %s', err.code, job_id)
+                if err.resp.status in [500, 503]:
+                    _log.info('%s: Retryable error, waiting for job to complete: %s', err.resp.status, job_id)
                     time.sleep(5)
                 else:
                     raise Exception(
-                'BigQuery job status check faild. Final error was: %s', err.code)
+                        'BigQuery job status check failed. Final error was: %s', err.resp.status)
 
         return job_id
 

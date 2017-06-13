@@ -90,7 +90,7 @@
       </li>
       <li>
         <a href="{{ url_for("airflow.code", dag_id=dag.dag_id, root=root) }}">
-          <span class="glyphicon glyphicon-flash" aria-hidden="true"></span>
+          <span class="glyphicon glyphicon-file" aria-hidden="true"></span>
           Code
         </a>
       </li>
@@ -205,10 +205,6 @@
             <button id="btn_success_downstream"
               type="button" class="btn" data-toggle="button">
               Downstream
-            </button>
-            <button id="btn_success_recursive"
-              type="button" class="btn" data-toggle="button">
-              Recursive
             </button>
           </span>
           <hr/>
@@ -350,7 +346,6 @@ function updateQueryStringParameter(uri, key, value) {
         "&downstream=" + $('#btn_success_downstream').hasClass('active') +
         "&future=" + $('#btn_success_future').hasClass('active') +
         "&past=" + $('#btn_success_past').hasClass('active') +
-        "&recursive=" + $('#btn_success_recursive').hasClass('active') +
         "&execution_date=" + execution_date +
         "&origin=" + encodeURIComponent(window.location);
 

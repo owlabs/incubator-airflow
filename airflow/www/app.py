@@ -117,13 +117,13 @@ def create_app(config=None, testing=False):
             from airflow.plugins_manager import (
                 admin_views, flask_blueprints, menu_links)
             for v in admin_views:
-                _log.info('Adding view ' + v.name)
+                _log.debug('Adding view ' + v.name)
                 admin.add_view(v)
             for bp in flask_blueprints:
-                _log.info('Adding blueprint ' + bp.name)
+                _log.debug('Adding blueprint ' + bp.name)
                 app.register_blueprint(bp)
             for ml in sorted(menu_links, key=lambda x: x.name):
-                _log.info('Adding menu link ' + ml.name)
+                _log.debug('Adding menu link ' + ml.name)
                 admin.add_link(ml)
 
         integrate_plugins()

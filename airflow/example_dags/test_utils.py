@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Used for unit tests"""
+import airflow
 from airflow.operators.bash_operator import BashOperator
 from airflow.models import DAG
 from datetime import datetime
@@ -25,5 +26,5 @@ task = BashOperator(
     task_id='sleeps_forever',
     dag=dag,
     bash_command="sleep 10000000000",
-    start_date=datetime(2016, 1, 1),
+    start_date=airflow.utils.dates.days_ago(2),
     owner='airflow')

@@ -16,15 +16,18 @@ from __future__ import print_function
 
 import doctest
 import os
+import re
 import unittest
 import logging
 import multiprocessing
 import mock
-import re
+from numpy.testing import assert_array_almost_equal
 import tempfile
 from datetime import datetime, time, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
+import signal
+from time import time as timetime
 from time import sleep
 import warnings
 
@@ -53,7 +56,7 @@ from airflow.bin import cli
 from airflow.www import app as application
 from airflow.settings import Session
 from airflow.utils.state import State
-from airflow.utils.dates import round_time
+from airflow.utils.dates import infer_time_unit, round_time, scale_time_units
 from airflow.utils.logging import LoggingMixin
 from lxml import html
 from airflow.exceptions import AirflowException
@@ -415,6 +418,28 @@ class CoreTest(unittest.TestCase):
             output_encoding='utf-8')
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
+    def test_bash_operator_kill(self):
+        import subprocess
+        import psutil
+        sleep_time = "100%d" % os.getpid()
+        t = BashOperator(
+            task_id='test_bash_operator_kill',
+            execution_timeout=timedelta(seconds=1),
+            bash_command="/bin/bash -c 'sleep %s'" % sleep_time,
+            dag=self.dag)
+        self.assertRaises(
+            exceptions.AirflowTaskTimeout,
+            t.run,
+            start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+        sleep(2)
+        pid = -1
+        for proc in psutil.process_iter():
+            if proc.cmdline() == ['sleep', sleep_time]:
+                pid = proc.pid
+        if pid != -1:
+            os.kill(pid, signal.SIGTERM)
+            self.fail("BashOperator's subprocess still running after stopping on timeout!")
+
     def test_trigger_dagrun(self):
         def trigga(context, obj):
             if True:
@@ -752,6 +777,30 @@ class CoreTest(unittest.TestCase):
         configuration.set("core", "FERNET_KEY", FERNET_KEY)
         assert configuration.has_option("core", "FERNET_KEY")
 
+    def test_config_override_original_when_non_empty_envvar_is_provided(self):
+        key = "AIRFLOW__CORE__FERNET_KEY"
+        value = "some value"
+        assert key not in os.environ
+
+        os.environ[key] = value
+        FERNET_KEY = configuration.get('core', 'FERNET_KEY')
+        assert FERNET_KEY == value
+
+        # restore the envvar back to the original state
+        del os.environ[key]
+
+    def test_config_override_original_when_empty_envvar_is_provided(self):
+        key = "AIRFLOW__CORE__FERNET_KEY"
+        value = ""
+        assert key not in os.environ
+
+        os.environ[key] = value
+        FERNET_KEY = configuration.get('core', 'FERNET_KEY')
+        assert FERNET_KEY == value
+
+        # restore the envvar back to the original state
+        del os.environ[key]
+
     def test_class_with_logger_should_have_logger_with_correct_name(self):
 
         # each class should automatically receive a logger with a correct name
@@ -786,6 +835,33 @@ class CoreTest(unittest.TestCase):
         rt6 = round_time(datetime(2015, 9, 13, 0, 0), timedelta(1), datetime(
             2015, 9, 14, 0, 0))
         assert rt6 == datetime(2015, 9, 14, 0, 0)
+
+    def test_infer_time_unit(self):
+
+        assert infer_time_unit([130, 5400, 10]) == 'minutes'
+
+        assert infer_time_unit([110, 50, 10, 100]) == 'seconds'
+
+        assert infer_time_unit([100000, 50000, 10000, 20000]) == 'hours'
+
+        assert infer_time_unit([200000, 100000]) == 'days'
+
+    def test_scale_time_units(self):
+
+        # use assert_almost_equal from numpy.testing since we are comparing
+        # floating point arrays
+        arr1 = scale_time_units([130, 5400, 10], 'minutes')
+        assert_array_almost_equal(arr1, [2.167, 90.0, 0.167], decimal=3)
+
+        arr2 = scale_time_units([110, 50, 10, 100], 'seconds')
+        assert_array_almost_equal(arr2, [110.0, 50.0, 10.0, 100.0], decimal=3)
+
+        arr3 = scale_time_units([100000, 50000, 10000, 20000], 'hours')
+        assert_array_almost_equal(arr3, [27.778, 13.889, 2.778, 5.556],
+                                  decimal=3)
+
+        arr4 = scale_time_units([200000, 100000], 'days')
+        assert_array_almost_equal(arr4, [2.315, 1.157], decimal=3)
 
     def test_duplicate_dependencies(self):
 
@@ -904,40 +980,48 @@ class CoreTest(unittest.TestCase):
         session.query(models.DagStat).delete()
         session.commit()
 
+        models.DagStat.update([], session=session)
+
         run1 = self.dag_bash.create_dagrun(
             run_id="run1",
             execution_date=DEFAULT_DATE,
             state=State.RUNNING)
 
-        models.DagStat.clean_dirty([self.dag_bash.dag_id], session=session)
+        models.DagStat.update([self.dag_bash.dag_id], session=session)
 
         qry = session.query(models.DagStat).all()
 
-        assert len(qry) == 1
-        assert qry[0].dag_id == self.dag_bash.dag_id and\
-                qry[0].state == State.RUNNING and\
-                qry[0].count == 1 and\
-                qry[0].dirty == False
+        self.assertEqual(3, len(qry))
+        self.assertEqual(self.dag_bash.dag_id, qry[0].dag_id)
+        for stats in qry:
+            if stats.state == State.RUNNING:
+                self.assertEqual(stats.count, 1)
+            else:
+                self.assertEqual(stats.count, 0)
+            self.assertFalse(stats.dirty)
 
         run2 = self.dag_bash.create_dagrun(
             run_id="run2",
             execution_date=DEFAULT_DATE+timedelta(days=1),
             state=State.RUNNING)
 
-        models.DagStat.clean_dirty([self.dag_bash.dag_id], session=session)
+        models.DagStat.update([self.dag_bash.dag_id], session=session)
 
         qry = session.query(models.DagStat).all()
 
-        assert len(qry) == 1
-        assert qry[0].dag_id == self.dag_bash.dag_id and\
-                qry[0].state == State.RUNNING and\
-                qry[0].count == 2 and\
-                qry[0].dirty == False
+        self.assertEqual(3, len(qry))
+        self.assertEqual(self.dag_bash.dag_id, qry[0].dag_id)
+        for stats in qry:
+            if stats.state == State.RUNNING:
+                self.assertEqual(stats.count, 2)
+            else:
+                self.assertEqual(stats.count, 0)
+            self.assertFalse(stats.dirty)
 
         session.query(models.DagRun).first().state = State.SUCCESS
         session.commit()
 
-        models.DagStat.clean_dirty([self.dag_bash.dag_id], session=session)
+        models.DagStat.update([self.dag_bash.dag_id], session=session)
 
         qry = session.query(models.DagStat).filter(models.DagStat.state == State.SUCCESS).all()
         assert len(qry) == 1
@@ -1258,7 +1342,7 @@ class CliTests(unittest.TestCase):
         self._assert_null_handler()
 
     def test_process_subdir_path_with_placeholder(self):
-        assert cli.process_subdir('DAGS_FOLDER/abc') == os.path.join(configuration.get_dags_folder(), 'abc')
+        assert cli.process_subdir('DAGS_FOLDER/abc') == os.path.join(settings.DAGS_FOLDER, 'abc')
 
     def test_trigger_dag(self):
         cli.trigger_dag(self.parser.parse_args([
@@ -1341,6 +1425,77 @@ class CliTests(unittest.TestCase):
         os.remove('variables1.json')
         os.remove('variables2.json')
 
+    def _wait_pidfile(self, pidfile):
+        while True:
+            try:
+                with open(pidfile) as f:
+                    return int(f.read())
+            except:
+                sleep(1)
+
+    def test_cli_webserver_foreground(self):
+        import subprocess
+
+        # Confirm that webserver hasn't been launched.
+        # pgrep returns exit status 1 if no process matched.
+        self.assertEqual(1, subprocess.Popen(["pgrep", "-c", "airflow"]).wait())
+        self.assertEqual(1, subprocess.Popen(["pgrep", "-c", "gunicorn"]).wait())
+
+        # Run webserver in foreground and terminate it.
+        p = subprocess.Popen(["airflow", "webserver"])
+        p.terminate()
+        p.wait()
+
+        # Assert that no process remains.
+        self.assertEqual(1, subprocess.Popen(["pgrep", "-c", "airflow"]).wait())
+        self.assertEqual(1, subprocess.Popen(["pgrep", "-c", "gunicorn"]).wait())
+
+    @unittest.skipIf("TRAVIS" in os.environ and bool(os.environ["TRAVIS"]),
+                     "Skipping test due to lack of required file permission")
+    def test_cli_webserver_foreground_with_pid(self):
+        import subprocess
+
+        # Run webserver in foreground with --pid option
+        pidfile = tempfile.mkstemp()[1]
+        p = subprocess.Popen(["airflow", "webserver", "--pid", pidfile])
+
+        # Check the file specified by --pid option exists
+        self._wait_pidfile(pidfile)
+
+        # Terminate webserver
+        p.terminate()
+        p.wait()
+
+    @unittest.skipIf("TRAVIS" in os.environ and bool(os.environ["TRAVIS"]),
+                     "Skipping test due to lack of required file permission")
+    def test_cli_webserver_background(self):
+        import subprocess
+        import psutil
+
+        # Confirm that webserver hasn't been launched.
+        self.assertEqual(1, subprocess.Popen(["pgrep", "-c", "airflow"]).wait())
+        self.assertEqual(1, subprocess.Popen(["pgrep", "-c", "gunicorn"]).wait())
+
+        # Run webserver in background.
+        subprocess.Popen(["airflow", "webserver", "-D"])
+        pidfile = cli.setup_locations("webserver")[0]
+        self._wait_pidfile(pidfile)
+
+        # Assert that gunicorn and its monitor are launched.
+        self.assertEqual(0, subprocess.Popen(["pgrep", "-c", "airflow"]).wait())
+        self.assertEqual(0, subprocess.Popen(["pgrep", "-c", "gunicorn"]).wait())
+
+        # Terminate monitor process.
+        pidfile = cli.setup_locations("webserver-monitor")[0]
+        pid = self._wait_pidfile(pidfile)
+        p = psutil.Process(pid)
+        p.terminate()
+        p.wait()
+
+        # Assert that no process remains.
+        self.assertEqual(1, subprocess.Popen(["pgrep", "-c", "airflow"]).wait())
+        self.assertEqual(1, subprocess.Popen(["pgrep", "-c", "gunicorn"]).wait())
+
 class WebUiTests(unittest.TestCase):
     def setUp(self):
         configuration.load_test_config()
@@ -1350,10 +1505,33 @@ class WebUiTests(unittest.TestCase):
         app.config['TESTING'] = True
         self.app = app.test_client()
 
-        self.dagbag = models.DagBag(
-            dag_folder=DEV_NULL, include_examples=True)
+        self.dagbag = models.DagBag(include_examples=True)
         self.dag_bash = self.dagbag.dags['example_bash_operator']
+        self.dag_bash2 = self.dagbag.dags['test_example_bash_operator']
+        self.sub_dag = self.dagbag.dags['example_subdag_operator']
         self.runme_0 = self.dag_bash.get_task('runme_0')
+        self.example_xcom = self.dagbag.dags['example_xcom']
+
+        self.dag_bash2.create_dagrun(
+            run_id="test_{}".format(models.DagRun.id_for_date(datetime.now())),
+            execution_date=DEFAULT_DATE,
+            start_date=datetime.now(),
+            state=State.RUNNING
+        )
+
+        self.sub_dag.create_dagrun(
+            run_id="test_{}".format(models.DagRun.id_for_date(datetime.now())),
+            execution_date=DEFAULT_DATE,
+            start_date=datetime.now(),
+            state=State.RUNNING
+        )
+
+        self.example_xcom.create_dagrun(
+            run_id="test_{}".format(models.DagRun.id_for_date(datetime.now())),
+            execution_date=DEFAULT_DATE,
+            start_date=datetime.now(),
+            state=State.RUNNING
+        )
 
     def test_index(self):
         response = self.app.get('/', follow_redirects=True)
@@ -1400,8 +1578,12 @@ class WebUiTests(unittest.TestCase):
         assert "example_bash_operator" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/landing_times?'
-            'days=30&dag_id=example_bash_operator')
-        assert "example_bash_operator" in response.data.decode('utf-8')
+            'days=30&dag_id=test_example_bash_operator')
+        assert "test_example_bash_operator" in response.data.decode('utf-8')
+        response = self.app.get(
+            '/admin/airflow/landing_times?'
+            'days=30&dag_id=example_xcom')
+        assert "example_xcom" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/gantt?dag_id=example_bash_operator')
         assert "example_bash_operator" in response.data.decode('utf-8')
@@ -1441,7 +1623,7 @@ class WebUiTests(unittest.TestCase):
         assert "example_bash_operator" in response.data.decode('utf-8')
         url = (
             "/admin/airflow/success?task_id=run_this_last&"
-            "dag_id=example_bash_operator&upstream=false&downstream=false&"
+            "dag_id=test_example_bash_operator&upstream=false&downstream=false&"
             "future=false&past=false&execution_date={}&"
             "origin=/admin".format(DEFAULT_DATE_DS))
         response = self.app.get(url)
@@ -1449,7 +1631,7 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(url + "&confirmed=true")
         response = self.app.get(
             '/admin/airflow/clear?task_id=run_this_last&'
-            'dag_id=example_bash_operator&future=true&past=false&'
+            'dag_id=test_example_bash_operator&future=true&past=false&'
             'upstream=true&downstream=false&'
             'execution_date={}&'
             'origin=/admin'.format(DEFAULT_DATE_DS))
@@ -1457,7 +1639,7 @@ class WebUiTests(unittest.TestCase):
         url = (
             "/admin/airflow/success?task_id=section-1&"
             "dag_id=example_subdag_operator&upstream=true&downstream=true&"
-            "recursive=true&future=false&past=false&execution_date={}&"
+            "future=false&past=false&execution_date={}&"
             "origin=/admin".format(DEFAULT_DATE_DS))
         response = self.app.get(url)
         assert "Wait a minute" in response.data.decode('utf-8')
@@ -1469,7 +1651,7 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(url + "&confirmed=true")
         url = (
             "/admin/airflow/clear?task_id=runme_1&"
-            "dag_id=example_bash_operator&future=false&past=false&"
+            "dag_id=test_example_bash_operator&future=false&past=false&"
             "upstream=false&downstream=true&"
             "execution_date={}&"
             "origin=/admin".format(DEFAULT_DATE_DS))
@@ -1513,23 +1695,19 @@ class WebUiTests(unittest.TestCase):
     def test_fetch_task_instance(self):
         url = (
             "/admin/airflow/object/task_instances?"
-            "dag_id=example_bash_operator&"
+            "dag_id=test_example_bash_operator&"
             "execution_date={}".format(DEFAULT_DATE_DS))
         response = self.app.get(url)
-        assert "{}" in response.data.decode('utf-8')
-
-        TI = models.TaskInstance
-        ti = TI(
-            task=self.runme_0, execution_date=DEFAULT_DATE)
-        job = jobs.LocalTaskJob(task_instance=ti, ignore_ti_state=True)
-        job.run()
-
-        response = self.app.get(url)
-        assert "runme_0" in response.data.decode('utf-8')
+        self.assertIn("run_this_last", response.data.decode('utf-8'))
 
     def tearDown(self):
         configuration.conf.set("webserver", "expose_config", "False")
         self.dag_bash.clear(start_date=DEFAULT_DATE, end_date=datetime.now())
+        session = Session()
+        session.query(models.DagRun).delete()
+        session.query(models.TaskInstance).delete()
+        session.commit()
+        session.close()
 
 
 class WebPasswordAuthTest(unittest.TestCase):
@@ -1772,6 +1950,7 @@ class HttpOpSensorTest(unittest.TestCase):
             dag=self.dag)
         sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
+
 class FakeWebHDFSHook(object):
     def __init__(self, conn_id):
         self.conn_id = conn_id
@@ -1781,6 +1960,78 @@ class FakeWebHDFSHook(object):
 
     def check_for_path(self, hdfs_path):
         return hdfs_path
+
+
+class FakeSnakeBiteClientException(Exception):
+    pass
+
+
+class FakeSnakeBiteClient(object):
+
+    def __init__(self):
+        self.started = True
+
+    def ls(self, path, include_toplevel=False):
+        """
+        the fake snakebite client
+        :param path: the array of path to test
+        :param include_toplevel: to return the toplevel directory info
+        :return: a list for path for the matching queries
+        """
+        if path[0] == '/datadirectory/empty_directory' and not include_toplevel:
+            return []
+        elif path[0] == '/datadirectory/datafile':
+            return [{'group': u'supergroup', 'permission': 420, 'file_type': 'f', 'access_time': 1481122343796,
+                     'block_replication': 3, 'modification_time': 1481122343862, 'length': 0, 'blocksize': 134217728,
+                     'owner': u'hdfs', 'path': '/datadirectory/datafile'}]
+        elif path[0] == '/datadirectory/empty_directory' and include_toplevel:
+            return [
+                {'group': u'supergroup', 'permission': 493, 'file_type': 'd', 'access_time': 0, 'block_replication': 0,
+                 'modification_time': 1481132141540, 'length': 0, 'blocksize': 0, 'owner': u'hdfs',
+                 'path': '/datadirectory/empty_directory'}]
+        elif path[0] == '/datadirectory/not_empty_directory' and include_toplevel:
+            return [
+                {'group': u'supergroup', 'permission': 493, 'file_type': 'd', 'access_time': 0, 'block_replication': 0,
+                 'modification_time': 1481132141540, 'length': 0, 'blocksize': 0, 'owner': u'hdfs',
+                 'path': '/datadirectory/empty_directory'},
+                {'group': u'supergroup', 'permission': 420, 'file_type': 'f', 'access_time': 1481122343796,
+                 'block_replication': 3, 'modification_time': 1481122343862, 'length': 0, 'blocksize': 134217728,
+                 'owner': u'hdfs', 'path': '/datadirectory/not_empty_directory/test_file'}]
+        elif path[0] == '/datadirectory/not_empty_directory':
+            return [{'group': u'supergroup', 'permission': 420, 'file_type': 'f', 'access_time': 1481122343796,
+                     'block_replication': 3, 'modification_time': 1481122343862, 'length': 0, 'blocksize': 134217728,
+                     'owner': u'hdfs', 'path': '/datadirectory/not_empty_directory/test_file'}]
+        elif path[0] == '/datadirectory/not_existing_file_or_directory':
+            raise FakeSnakeBiteClientException
+        elif path[0] == '/datadirectory/regex_dir':
+            return [{'group': u'supergroup', 'permission': 420, 'file_type': 'f', 'access_time': 1481122343796,
+                     'block_replication': 3, 'modification_time': 1481122343862, 'length': 12582912, 'blocksize': 134217728,
+                     'owner': u'hdfs', 'path': '/datadirectory/regex_dir/test1file'},
+                    {'group': u'supergroup', 'permission': 420, 'file_type': 'f', 'access_time': 1481122343796,
+                     'block_replication': 3, 'modification_time': 1481122343862, 'length': 12582912, 'blocksize': 134217728,
+                     'owner': u'hdfs', 'path': '/datadirectory/regex_dir/test2file'},
+                    {'group': u'supergroup', 'permission': 420, 'file_type': 'f', 'access_time': 1481122343796,
+                     'block_replication': 3, 'modification_time': 1481122343862, 'length': 12582912, 'blocksize': 134217728,
+                     'owner': u'hdfs', 'path': '/datadirectory/regex_dir/test3file'},
+                    {'group': u'supergroup', 'permission': 420, 'file_type': 'f', 'access_time': 1481122343796,
+                     'block_replication': 3, 'modification_time': 1481122343862, 'length': 12582912, 'blocksize': 134217728,
+                     'owner': u'hdfs', 'path': '/datadirectory/regex_dir/copying_file_1.txt._COPYING_'},
+                    {'group': u'supergroup', 'permission': 420, 'file_type': 'f', 'access_time': 1481122343796,
+                     'block_replication': 3, 'modification_time': 1481122343862, 'length': 12582912, 'blocksize': 134217728,
+                     'owner': u'hdfs', 'path': '/datadirectory/regex_dir/copying_file_3.txt.sftp'}
+                    ]
+        else:
+            raise FakeSnakeBiteClientException
+
+
+class FakeHDFSHook(object):
+    def __init__(self, conn_id=None):
+        self.conn_id = conn_id
+
+    def get_conn(self):
+        client = FakeSnakeBiteClient()
+        return client
+
 
 class ConnectionTest(unittest.TestCase):
     def setUp(self):
@@ -1979,6 +2230,8 @@ class EmailSmtpTest(unittest.TestCase):
         assert msg['Subject'] == 'subject'
         assert msg['From'] == configuration.get('smtp', 'SMTP_MAIL_FROM')
         assert len(msg.get_payload()) == 2
+        assert msg.get_payload()[-1].get(u'Content-Disposition') == \
+               u'attachment; filename="' + os.path.basename(attachment.name) + '"'
         mimeapp = MIMEApplication('attachment')
         assert msg.get_payload()[-1].get_payload() == mimeapp.get_payload()
 
@@ -1996,6 +2249,8 @@ class EmailSmtpTest(unittest.TestCase):
         assert msg['Subject'] == 'subject'
         assert msg['From'] == configuration.get('smtp', 'SMTP_MAIL_FROM')
         assert len(msg.get_payload()) == 2
+        assert msg.get_payload()[-1].get(u'Content-Disposition') == \
+               u'attachment; filename="' + os.path.basename(attachment.name) + '"'
         mimeapp = MIMEApplication('attachment')
         assert msg.get_payload()[-1].get_payload() == mimeapp.get_payload()
 
@@ -2031,6 +2286,21 @@ class EmailSmtpTest(unittest.TestCase):
             configuration.get('smtp', 'SMTP_HOST'),
             configuration.getint('smtp', 'SMTP_PORT'),
         )
+
+    @mock.patch('smtplib.SMTP_SSL')
+    @mock.patch('smtplib.SMTP')
+    def test_send_mime_noauth(self, mock_smtp, mock_smtp_ssl):
+        configuration.conf.remove_option('smtp', 'SMTP_USER')
+        configuration.conf.remove_option('smtp', 'SMTP_PASSWORD')
+        mock_smtp.return_value = mock.Mock()
+        mock_smtp_ssl.return_value = mock.Mock()
+        utils.email.send_MIME_email('from', 'to', MIMEMultipart(), dryrun=False)
+        assert not mock_smtp_ssl.called
+        mock_smtp.assert_called_with(
+            configuration.get('smtp', 'SMTP_HOST'),
+            configuration.getint('smtp', 'SMTP_PORT'),
+        )
+        assert not mock_smtp.login.called
 
     @mock.patch('smtplib.SMTP_SSL')
     @mock.patch('smtplib.SMTP')

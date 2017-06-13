@@ -30,7 +30,6 @@ from sqlalchemy import event, exc
 from sqlalchemy.pool import Pool
 
 from airflow import settings
-from airflow import configuration
 
 _log = logging.getLogger(__name__)
 
@@ -116,7 +115,7 @@ def initdb():
     merge_conn(
         models.Connection(
             conn_id='airflow_ci', conn_type='mysql',
-            host='localhost', login='root',
+            host='localhost', login='root', extra="{\"local_infile\": true}",
             schema='airflow_ci'))
     merge_conn(
         models.Connection(
@@ -193,6 +192,10 @@ def initdb():
         models.Connection(
             conn_id='aws_default', conn_type='aws',
             extra='{"region_name": "us-east-1"}'))
+    merge_conn(
+        models.Connection(
+            conn_id='spark_default', conn_type='spark',
+            host='yarn', extra='{"queue": "root.default"}'))
     merge_conn(
         models.Connection(
             conn_id='emr_default', conn_type='emr',
@@ -289,8 +292,7 @@ def upgradedb():
     directory = os.path.join(package_dir, 'migrations')
     config = Config(os.path.join(package_dir, 'alembic.ini'))
     config.set_main_option('script_location', directory)
-    config.set_main_option('sqlalchemy.url',
-                           configuration.get('core', 'SQL_ALCHEMY_CONN'))
+    config.set_main_option('sqlalchemy.url', settings.SQL_ALCHEMY_CONN)
     command.upgrade(config, 'heads')
 
 

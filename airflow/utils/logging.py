@@ -254,7 +254,7 @@ class S3Log(LoggingMixin):
         self.logger.error(err)
         return err if return_error else ''
 
-    def write(self, log, remote_log_location, append=False):
+    def write(self, log, remote_log_location, append=True):
         """
         Writes the log to the remote_log_location. Fails silently if no hook
         was created.
@@ -333,7 +333,7 @@ class GCSLog(LoggingMixin):
         self.logger.error(err)
         return err if return_error else ''
 
-    def write(self, log, remote_log_location, append=False):
+    def write(self, log, remote_log_location, append=True):
         """
         Writes the log to the remote_log_location. Fails silently if no hook
         was created.

@@ -21,7 +21,8 @@ from airflow.www.app import csrf
 from airflow import models
 
 from flask import (
-    g, Markup, Blueprint, redirect, jsonify, abort, request, current_app, send_file
+    g, Markup, Blueprint, redirect, jsonify, abort,
+    request, current_app, send_file, url_for
 )
 from datetime import datetime
 
@@ -31,15 +32,14 @@ requires_authentication = airflow.api.api_auth.requires_authentication
 
 api_experimental = Blueprint('api_experimental', __name__)
 
-_log = logging.getLogger(__name__)
-
 
 @csrf.exempt
 @api_experimental.route('/dags/<string:dag_id>/dag_runs', methods=['POST'])
 @requires_authentication
 def trigger_dag(dag_id):
     """
-    Trigger a new dag run for a Dag with an execution date of now
+    Trigger a new dag run for a Dag with an execution date of now unless
+    specified in the data.
     """
     data = request.get_json(force=True)
 
@@ -51,8 +51,27 @@ def trigger_dag(dag_id):
     if 'conf' in data:
         conf = data['conf']
 
+    execution_date = None
+    if 'execution_date' in data and data['execution_date'] is not None:
+        execution_date = data['execution_date']
+
+        # Convert string datetime into actual datetime
+        try:
+            execution_date = datetime.strptime(execution_date,
+                                               '%Y-%m-%dT%H:%M:%S')
+        except ValueError:
+            error_message = (
+                'Given execution date, {}, could not be identified '
+                'as a date. Example date format: 2015-11-16T14:34:15'
+                .format(execution_date))
+            _log.info(error_message)
+            response = jsonify({'error': error_message})
+            response.status_code = 400
+
+            return response
+
     try:
-        dr = trigger.trigger_dag(dag_id, run_id, conf)
+        dr = trigger.trigger_dag(dag_id, run_id, conf, execution_date)
     except AirflowException as err:
         _log.error(err)
         response = jsonify(error="{}".format(err))
@@ -105,7 +124,6 @@ def trigger_dag_for_date(dag_id, execution_date):
     try:
         dr = trigger.trigger_dag(dag_id, run_id, conf, execution_date)
     except AirflowException as err:
-        logging.error(err)
         response = jsonify(error="{}".format(err))
         response.status_code = 404
         return response
@@ -146,6 +164,25 @@ def task_info(dag_id, task_id):
     return jsonify(fields)
 
 
+@api_experimental.route('/latest_runs', methods=['GET'])
+@requires_authentication
+def latest_dag_runs():
+    """Returns the latest running DagRun for each DAG formatted for the UI. """
+    from airflow.models import DagRun
+    dagruns = DagRun.get_latest_runs()
+    payload = []
+    for dagrun in dagruns:
+        if dagrun.execution_date:
+            payload.append({
+                'dag_id': dagrun.dag_id,
+                'execution_date': dagrun.execution_date.strftime("%Y-%m-%d %H:%M"),
+                'start_date': ((dagrun.start_date or '') and
+                               dagrun.start_date.strftime("%Y-%m-%d %H:%M")),
+                'dag_run_url': url_for('airflow.graph', dag_id=dagrun.dag_id,
+                                       execution_date=dagrun.execution_date)
+            })
+    return jsonify(payload)
+    
 @api_experimental.route('/dags/<string:dag_id>/tasks/<string:task_id>/instances/<string:execution_date>', methods=['GET'])
 @requires_authentication
 def task_instance_info(dag_id, task_id, execution_date):

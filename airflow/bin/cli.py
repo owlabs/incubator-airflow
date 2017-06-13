@@ -22,7 +22,6 @@ import os
 import subprocess
 import textwrap
 import warnings
-from datetime import datetime
 from importlib import import_module
 
 import argparse
@@ -53,18 +52,16 @@ from airflow.models import (DagModel, DagBag, TaskInstance,
 from airflow.ti_deps.dep_context import (DepContext, SCHEDULER_DEPS)
 from airflow.utils import db as db_utils
 from airflow.utils import logging as logging_utils
-from airflow.utils.state import State
+from airflow.utils.file import mkdirs
 from airflow.www.app import cached_app
 
 from sqlalchemy import func
 from sqlalchemy.orm import exc
 
-DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
 
 _log = logging.getLogger(__name__)
 
 api.load_auth()
-
 api_module = import_module(conf.get('cli', 'api_client'))
 api_client = api_module.Client(api_base_url=conf.get('cli', 'endpoint_url'),
                                auth=api.api_auth.client_auth)
@@ -106,11 +103,8 @@ def setup_locations(process, pid=None, stdout=None, stderr=None, log=None):
 
 
 def process_subdir(subdir):
-    dags_folder = conf.get("core", "DAGS_FOLDER")
-    dags_folder = os.path.expanduser(dags_folder)
     if subdir:
-        if "DAGS_FOLDER" in subdir:
-            subdir = subdir.replace("DAGS_FOLDER", dags_folder)
+        subdir = subdir.replace('DAGS_FOLDER', settings.DAGS_FOLDER)
         subdir = os.path.abspath(os.path.expanduser(subdir))
         return subdir
 
@@ -170,7 +164,8 @@ def trigger_dag(args):
     try:
         message = api_client.trigger_dag(dag_id=args.dag_id,
                                          run_id=args.run_id,
-                                         conf=args.conf)
+                                         conf=args.conf,
+                                         execution_date=args.exec_date)
     except IOError as err:
         _log.error(err)
         raise AirflowException(err)
@@ -287,6 +282,7 @@ def export_helper(filepath):
         varfile.write(json.dumps(var_dict, sort_keys=True, indent=4))
     print("{} variables successfully exported to {}".format(len(var_dict), filepath))
 
+
 def pause(args, dag=None):
     set_is_paused(True, args, dag)
 
@@ -316,7 +312,7 @@ def run(args, dag=None):
     if dag:
         args.dag_id = dag.dag_id
 
-    # Setting up logging
+    # Load custom airflow config
     directory = "/{args.dag_id}/{args.task_id}".format(args=args)
     iso = args.execution_date.isoformat()
     filename = "{directory}/{iso}".format(**locals())
@@ -340,6 +336,7 @@ def run(args, dag=None):
     task = dag.get_task(task_id=args.task_id)
 
     ti = TaskInstance(task, args.execution_date)
+    ti.refresh_from_db()
 
     if args.local:
         print("Logging into: " + filename)
@@ -396,6 +393,10 @@ def run(args, dag=None):
         executor.heartbeat()
         executor.end()
 
+    # Child processes should not flush or upload to remote
+    if args.raw:
+        return
+
     # Force the log to flush, and set the handler to go back to normal so we
     # don't continue logging to the task's log file. The flush is important
     # because we subsequently read from the log to insert into S3 or Google
@@ -433,10 +434,7 @@ def run(args, dag=None):
             logging_utils.S3Log().write(log, remote_log_location)
         # GCS
         elif remote_base.startswith('gs:/'):
-            logging_utils.GCSLog().write(
-                log,
-                remote_log_location,
-                append=True)
+            logging_utils.GCSLog().write(log, remote_log_location)
         # Other
         elif remote_base and remote_base != 'None':
             _log.error(
@@ -613,7 +611,7 @@ def restart_workers(gunicorn_master_proc, num_workers_expected):
     def start_refresh(gunicorn_master_proc):
         batch_size = conf.getint('webserver', 'worker_refresh_batch_size')
         _log.debug('%s doing a refresh of %s workers',
-            state, batch_size)
+                   state, batch_size)
         sys.stdout.flush()
         sys.stderr.flush()
 
@@ -622,11 +620,10 @@ def restart_workers(gunicorn_master_proc, num_workers_expected):
             gunicorn_master_proc.send_signal(signal.SIGTTIN)
             excess += 1
             wait_until_true(lambda: num_workers_expected + excess ==
-                get_num_workers_running(gunicorn_master_proc))
-
+                            get_num_workers_running(gunicorn_master_proc))
 
     wait_until_true(lambda: num_workers_expected ==
-        get_num_workers_running(gunicorn_master_proc))
+                    get_num_workers_running(gunicorn_master_proc))
 
     while True:
         num_workers_running = get_num_workers_running(gunicorn_master_proc)
@@ -649,7 +646,7 @@ def restart_workers(gunicorn_master_proc, num_workers_expected):
                 gunicorn_master_proc.send_signal(signal.SIGTTOU)
                 excess -= 1
                 wait_until_true(lambda: num_workers_expected + excess ==
-                    get_num_workers_running(gunicorn_master_proc))
+                                get_num_workers_running(gunicorn_master_proc))
 
         # Start a new worker by asking gunicorn to increase number of workers
         elif num_workers_running == num_workers_expected:
@@ -697,7 +694,7 @@ def webserver(args):
             "Starting the web server on port {0} and host {1}.".format(
                 args.port, args.hostname))
         app.run(debug=True, port=args.port, host=args.hostname,
-                ssl_context=(ssl_cert, ssl_key))
+                ssl_context=(ssl_cert, ssl_key) if ssl_cert and ssl_key else None)
     else:
         pid, stdout, stderr, log_file = setup_locations("webserver", pid=args.pid)
         print(
@@ -728,27 +725,66 @@ def webserver(args):
             run_args += ['--error-logfile', str(args.error_logfile)]
 
         if args.daemon:
-            run_args += ["-D"]
+            run_args += ['-D']
+
         if ssl_cert:
             run_args += ['--certfile', ssl_cert, '--keyfile', ssl_key]
 
         run_args += ["airflow.www.app:cached_app()"]
 
-        gunicorn_master_proc = subprocess.Popen(run_args)
+        gunicorn_master_proc = None
 
         def kill_proc(dummy_signum, dummy_frame):
             gunicorn_master_proc.terminate()
             gunicorn_master_proc.wait()
             sys.exit(0)
 
-        signal.signal(signal.SIGINT, kill_proc)
-        signal.signal(signal.SIGTERM, kill_proc)
+        def monitor_gunicorn(gunicorn_master_proc):
+            # These run forever until SIG{INT, TERM, KILL, ...} signal is sent
+            if conf.getint('webserver', 'worker_refresh_interval') > 0:
+                restart_workers(gunicorn_master_proc, num_workers)
+            else:
+                while True:
+                    time.sleep(1)
 
-        # These run forever until SIG{INT, TERM, KILL, ...} signal is sent
-        if conf.getint('webserver', 'worker_refresh_interval') > 0:
-            restart_workers(gunicorn_master_proc, num_workers)
+        if args.daemon:
+            base, ext = os.path.splitext(pid)
+            ctx = daemon.DaemonContext(
+                pidfile=TimeoutPIDLockFile(base + "-monitor" + ext, -1),
+                files_preserve=[handle],
+                stdout=stdout,
+                stderr=stderr,
+                signal_map={
+                    signal.SIGINT: kill_proc,
+                    signal.SIGTERM: kill_proc
+                },
+            )
+            with ctx:
+                subprocess.Popen(run_args)
+
+                # Reading pid file directly, since Popen#pid doesn't
+                # seem to return the right value with DaemonContext.
+                while True:
+                    try:
+                        with open(pid) as f:
+                            gunicorn_master_proc_pid = int(f.read())
+                            break
+                    except IOError:
+                        logging.debug("Waiting for gunicorn's pid file to be created.")
+                        time.sleep(0.1)
+
+                gunicorn_master_proc = psutil.Process(gunicorn_master_proc_pid)
+                monitor_gunicorn(gunicorn_master_proc)
+
+            stdout.close()
+            stderr.close()
         else:
-            while True: time.sleep(1)
+            gunicorn_master_proc = subprocess.Popen(run_args)
+
+            signal.signal(signal.SIGINT, kill_proc)
+            signal.signal(signal.SIGTERM, kill_proc)
+
+            monitor_gunicorn(gunicorn_master_proc)
 
 
 def scheduler(args):
@@ -1073,7 +1109,7 @@ class CLIFactory(object):
         'subdir': Arg(
             ("-sd", "--subdir"),
             "File location or directory from which to look for the dag",
-            default=DAGS_FOLDER),
+            default=settings.DAGS_FOLDER),
         'start_date': Arg(
             ("-s", "--start_date"), "Override start_date YYYY-MM-DD",
             type=parsedate),
@@ -1152,6 +1188,9 @@ class CLIFactory(object):
         'conf': Arg(
             ('-c', '--conf'),
             "JSON string that gets pickled into the DagRun's conf attribute"),
+        'exec_date': Arg(
+            ("-e", "--exec_date"), help="The execution date of the DAG",
+            type=parsedate),
         # pool
         'pool_set': Arg(
             ("-s", "--set"),
@@ -1244,6 +1283,8 @@ class CLIFactory(object):
             ("-p", "--pickle"),
             "Serialized pickle object of the entire dag (used internally)"),
         'job_id': Arg(("-j", "--job_id"), argparse.SUPPRESS),
+        'cfg_path': Arg(
+            ("--cfg_path", ), "Path to config file to use instead of airflow.cfg"),
         # webserver
         'port': Arg(
             ("-p", "--port"),
@@ -1305,7 +1346,7 @@ class CLIFactory(object):
             help="Set number of seconds to execute before exiting"),
         'num_runs': Arg(
             ("-n", "--num_runs"),
-            default=None, type=int,
+            default=-1, type=int,
             help="Set the number of runs to execute before exiting"),
         # worker
         'do_pickle': Arg(
@@ -1399,7 +1440,7 @@ class CLIFactory(object):
         }, {
             'func': trigger_dag,
             'help': "Trigger a DAG run",
-            'args': ('dag_id', 'subdir', 'run_id', 'conf'),
+            'args': ('dag_id', 'subdir', 'run_id', 'conf', 'exec_date'),
         }, {
             'func': pool,
             'help': "CRUD operations on pools",
@@ -1422,7 +1463,7 @@ class CLIFactory(object):
             'help': "Run a single task instance",
             'args': (
                 'dag_id', 'task_id', 'execution_date', 'subdir',
-                'mark_success', 'force', 'pool',
+                'mark_success', 'force', 'pool', 'cfg_path',
                 'local', 'raw', 'ignore_all_dependencies', 'ignore_dependencies',
                 'ignore_depends_on_past', 'ship_dag', 'pickle', 'job_id'),
         }, {
@@ -1475,7 +1516,7 @@ class CLIFactory(object):
             'func': upgradedb,
             'help': "Upgrade the metadata database to latest version",
             'args': tuple(),
-        },{
+        }, {
             'func': scheduler,
             'help': "Start a scheduler instance",
             'args': ('dag_id_opt', 'subdir', 'run_duration', 'num_runs',

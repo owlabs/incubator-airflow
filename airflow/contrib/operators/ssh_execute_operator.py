@@ -144,7 +144,7 @@ class SSHExecuteOperator(BaseOperator):
             _log.info("Output:")
             line = ''
             for line in iter(sp.stdout.readline, b''):
-                line = line.decode().strip()
+                line = line.decode('utf_8').strip()
                 _log.info(line)
             sp.wait()
             _log.info("Command exited with "

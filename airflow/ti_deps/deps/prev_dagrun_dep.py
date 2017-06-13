@@ -39,10 +39,25 @@ class PrevDagrunDep(BaseTIDep):
             raise StopIteration
 
         # Don't depend on the previous task instance if we are the first task
-        if ti.execution_date == ti.task.start_date:
-            yield self._passing_status(
-                reason="This task instance was the first task instance for it's task.")
-            raise StopIteration
+        dag = ti.task.dag
+        if dag.catchup:
+            if dag.previous_schedule(ti.execution_date) is None:
+                yield self._passing_status(
+                    reason="This task does not have a schedule or is @once"
+                )
+                return
+            if dag.previous_schedule(ti.execution_date) < ti.task.start_date:
+                yield self._passing_status(
+                    reason="This task instance was the first task instance for its task.")
+                raise StopIteration
+        else:
+            dr = ti.get_dagrun()
+            last_dagrun = dr.get_previous_dagrun() if dr else None
+
+            if not last_dagrun:
+                yield self._passing_status(
+                    reason="This task instance was the first task instance for its task.")
+                raise StopIteration
 
         previous_ti = ti.previous_ti
         if not previous_ti:

@@ -22,12 +22,15 @@ from datetime import datetime
 import logging
 from urllib.parse import urlparse
 from time import sleep
+import re
+import sys
 
-import airflow
-from airflow import hooks, settings
+from airflow import settings
 from airflow.exceptions import AirflowException, AirflowSensorTimeout, AirflowSkipException
 from airflow.models import BaseOperator, TaskInstance
 from airflow.hooks.base_hook import BaseHook
+from airflow.hooks.hdfs_hook import HDFSHook
+from airflow.hooks.http_hook import HttpHook
 from airflow.utils.state import State
 from airflow.utils.decorators import apply_defaults
 
@@ -151,7 +154,12 @@ class MetastorePartitionSensor(SqlSensor):
         self.schema = schema
         self.first_poke = True
         self.conn_id = mysql_conn_id
-        super(MetastorePartitionSensor, self).__init__(*args, **kwargs)
+        # TODO(aoen): We shouldn't be using SqlSensor here but MetastorePartitionSensor.
+        # The problem is the way apply_defaults works isn't compatible with inheritance.
+        # The inheritance model needs to be reworked in order to support overriding args/
+        # kwargs with arguments here, then 'conn_id' and 'sql' can be passed into the
+        # constructor below and apply_defaults will no longer throw an exception.
+        super(SqlSensor, self).__init__(*args, **kwargs)
 
     def poke(self, context):
         if self.first_poke:
@@ -269,7 +277,7 @@ class NamedHivePartitionSensor(BaseSensorOperator):
             self,
             partition_names,
             metastore_conn_id='metastore_default',
-            poke_interval=60*3,
+            poke_interval=60 * 3,
             *args,
             **kwargs):
         super(NamedHivePartitionSensor, self).__init__(
@@ -282,18 +290,19 @@ class NamedHivePartitionSensor(BaseSensorOperator):
         self.partition_names = partition_names
         self.next_poke_idx = 0
 
+    @classmethod
     def parse_partition_name(self, partition):
         try:
-            schema, table_partition = partition.split('.')
+            schema, table_partition = partition.split('.', 1)
             table, partition = table_partition.split('/', 1)
             return schema, table, partition
         except ValueError as e:
             raise ValueError('Could not parse ' + partition)
 
     def poke(self, context):
-
         if not hasattr(self, 'hook'):
-            self.hook = airflow.hooks.hive_hooks.HiveMetastoreHook(
+            from airflow.hooks.hive_hooks import HiveMetastoreHook
+            self.hook = HiveMetastoreHook(
                 metastore_conn_id=self.metastore_conn_id)
 
         def poke_partition(partition):
@@ -362,7 +371,8 @@ class HivePartitionSensor(BaseSensorOperator):
             'Poking for table {self.schema}.{self.table}, '
             'partition {self.partition}'.format(**locals()))
         if not hasattr(self, 'hook'):
-            self.hook = airflow.hooks.hive_hooks.HiveMetastoreHook(
+            from airflow.hooks.hive_hooks import HiveMetastoreHook
+            self.hook = HiveMetastoreHook(
                 metastore_conn_id=self.metastore_conn_id)
         return self.hook.check_for_partition(
             self.schema, self.table, self.partition)
@@ -373,29 +383,77 @@ class HdfsSensor(BaseSensorOperator):
     Waits for a file or folder to land in HDFS
     """
     template_fields = ('filepath',)
-    ui_color = '#4d9de0'
+    ui_color = settings.WEB_COLORS['LIGHTBLUE']
 
     @apply_defaults
     def __init__(
             self,
             filepath,
             hdfs_conn_id='hdfs_default',
+            ignored_ext=['_COPYING_'],
+            ignore_copying=True,
+            file_size=None,
+            hook=HDFSHook,
             *args, **kwargs):
         super(HdfsSensor, self).__init__(*args, **kwargs)
         self.filepath = filepath
         self.hdfs_conn_id = hdfs_conn_id
+        self.file_size = file_size
+        self.ignored_ext = ignored_ext
+        self.ignore_copying = ignore_copying
+        self.hook = hook
+
+    @staticmethod
+    def filter_for_filesize(result, size=None):
+        """
+        Will test the filepath result and test if its size is at least self.filesize
+        :param result: a list of dicts returned by Snakebite ls
+        :param size: the file size in MB a file should be at least to trigger True
+        :return: (bool) depending on the matching criteria
+        """
+        if size:
+            _log.debug('Filtering for file size >= %s in files: %s', size, map(lambda x: x['path'], result))
+            size *= settings.MEGABYTE
+            result = [x for x in result if x['length'] >= size]
+            _log.debug('HdfsSensor.poke: after size filter result is %s', result)
+        return result
+
+    @staticmethod
+    def filter_for_ignored_ext(result, ignored_ext, ignore_copying):
+        """
+        Will filter if instructed to do so the result to remove matching criteria
+        :param result: (list) of dicts returned by Snakebite ls
+        :param ignored_ext: (list) of ignored extentions
+        :param ignore_copying: (bool) shall we ignore ?
+        :return:
+        """
+        if ignore_copying:
+            regex_builder = "^.*\.(%s$)$" % '$|'.join(ignored_ext)
+            ignored_extentions_regex = re.compile(regex_builder)
+            _log.debug('Filtering result for ignored extentions: %s in files %s', ignored_extentions_regex.pattern,
+                          map(lambda x: x['path'], result))
+            result = [x for x in result if not ignored_extentions_regex.match(x['path'])]
+            _log.debug('HdfsSensor.poke: after ext filter result is %s', result)
+        return result
 
     def poke(self, context):
-        import airflow.hooks.hdfs_hook
-        sb = airflow.hooks.hdfs_hook.HDFSHook(self.hdfs_conn_id).get_conn()
+        sb = self.hook(self.hdfs_conn_id).get_conn()
         logging.getLogger("snakebite").setLevel(logging.WARNING)
-        _log.info(
-            'Poking for file {self.filepath} '.format(**locals()))
+        _log.info('Poking for file {self.filepath} '.format(**locals()))
         try:
-            files = [f for f in sb.ls([self.filepath])]
+            # IMOO it's not right here, as there no raise of any kind.
+            # if the filepath is let's say '/data/mydirectory', it's correct but if it is '/data/mydirectory/*',
+            # it's not correct as the directory exists and sb does not raise any error
+            # here is a quick fix
+            result = [f for f in sb.ls([self.filepath], include_toplevel=False)]
+            logging.debug('HdfsSensor.poke: result is %s', result)
+            result = self.filter_for_ignored_ext(result, self.ignored_ext, self.ignore_copying)
+            result = self.filter_for_filesize(result, self.file_size)
+            return bool(result)
         except:
+            e = sys.exc_info()
+            _log.debug("Caught an exception !: %s", str(e))
             return False
-        return True
 
 
 class WebHdfsSensor(BaseSensorOperator):
@@ -415,7 +473,8 @@ class WebHdfsSensor(BaseSensorOperator):
         self.webhdfs_conn_id = webhdfs_conn_id
 
     def poke(self, context):
-        c = airflow.hooks.webhdfs_hook.WebHDFSHook(self.webhdfs_conn_id)
+        from airflow.hooks.webhdfs_hook import WebHDFSHook
+        c = WebHDFSHook(self.webhdfs_conn_id)
         _log.info(
             'Poking for file {self.filepath} '.format(**locals()))
         return c.check_for_path(hdfs_path=self.filepath)
@@ -465,8 +524,8 @@ class S3KeySensor(BaseSensorOperator):
         self.s3_conn_id = s3_conn_id
 
     def poke(self, context):
-        import airflow.hooks.S3_hook
-        hook = airflow.hooks.S3_hook.S3Hook(s3_conn_id=self.s3_conn_id)
+        from airflow.hooks.S3_hook import S3Hook
+        hook = S3Hook(s3_conn_id=self.s3_conn_id)
         full_url = "s3://" + self.bucket_name + "/" + self.bucket_key
         _log.info('Poking for key : {full_url}'.format(**locals()))
         if self.wildcard_match:
@@ -512,8 +571,8 @@ class S3PrefixSensor(BaseSensorOperator):
     def poke(self, context):
         _log.info('Poking for prefix : {self.prefix}\n'
                   'in bucket s3://{self.bucket_name}'.format(**locals()))
-        import airflow.hooks.S3_hook
-        hook = airflow.hooks.S3_hook.S3Hook(s3_conn_id=self.s3_conn_id)
+        from airflow.hooks.S3_hook import S3Hook
+        hook = S3Hook(s3_conn_id=self.s3_conn_id)
         return hook.check_for_prefix(
             prefix=self.prefix,
             delimiter=self.delimiter,
@@ -605,7 +664,7 @@ class HttpSensor(BaseSensorOperator):
         self.extra_options = extra_options or {}
         self.response_check = response_check
 
-        self.hook = hooks.http_hook.HttpHook(method='GET', http_conn_id=http_conn_id)
+        self.hook = HttpHook(method='GET', http_conn_id=http_conn_id)
 
     def poke(self, context):
         _log.info('Poking: ' + self.endpoint)

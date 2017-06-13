@@ -13,20 +13,16 @@
 # limitations under the License.
 #
 
-from past.utils import old_div
 from past.builtins import basestring, unicode
 
 import os
 import pkg_resources
 import socket
-import importlib
 from functools import wraps
 from datetime import datetime, timedelta
 import dateutil.parser
 import copy
-from itertools import chain, product
 import json
-from lxml import html
 
 import inspect
 from textwrap import dedent
@@ -48,6 +44,7 @@ from flask._compat import PY2
 import jinja2
 import markdown
 import nvd3
+import ast
 
 from wtforms import (
     Form, SelectField, TextAreaField, PasswordField, StringField, validators)
@@ -73,6 +70,7 @@ from airflow.utils.state import State
 from airflow.utils.db import provide_session
 from airflow.utils.helpers import alchemy_to_dict
 from airflow.utils import logging as log_utils
+from airflow.utils.dates import infer_time_unit, scale_time_units
 from airflow.www import utils as wwwutils
 from airflow.www.forms import DateTimeForm, DateTimeWithNumRunsForm
 from airflow.configuration import AirflowConfigException
@@ -80,7 +78,7 @@ from airflow.configuration import AirflowConfigException
 QUERY_LIMIT = 100000
 CHART_LIMIT = 200000
 
-dagbag = models.DagBag(os.path.expanduser(conf.get('core', 'DAGS_FOLDER')))
+dagbag = models.DagBag(settings.DAGS_FOLDER)
 
 login_required = airflow.login.login_required
 current_user = airflow.login.current_user
@@ -171,7 +169,7 @@ def nobr_f(v, c, m, p):
 
 def label_link(v, c, m, p):
     try:
-        default_params = eval(m.default_params)
+        default_params = ast.literal_eval(m.default_params)
     except:
         default_params = {}
     url = url_for(
@@ -470,6 +468,8 @@ class Airflow(BaseView):
         ds = models.DagStat
         session = Session()
 
+        ds.update()
+
         qry = (
             session.query(ds.dag_id, ds.state, ds.count)
         )
@@ -499,26 +499,24 @@ class Airflow(BaseView):
 
     @expose('/task_stats')
     def task_stats(self):
-        task_ids = []
-        dag_ids = []
-        for dag in dagbag.dags.values():
-            task_ids += dag.task_ids
-            if not dag.is_subdag:
-                dag_ids.append(dag.dag_id)
-
         TI = models.TaskInstance
         DagRun = models.DagRun
+        Dag = models.DagModel
         session = Session()
 
         LastDagRun = (
             session.query(DagRun.dag_id, sqla.func.max(DagRun.execution_date).label('execution_date'))
+            .join(Dag, Dag.dag_id == DagRun.dag_id)
             .filter(DagRun.state != State.RUNNING)
+            .filter(Dag.is_active == True)
             .group_by(DagRun.dag_id)
             .subquery('last_dag_run')
         )
         RunningDagRun = (
             session.query(DagRun.dag_id, DagRun.execution_date)
+            .join(Dag, Dag.dag_id == DagRun.dag_id)
             .filter(DagRun.state == State.RUNNING)
+            .filter(Dag.is_active == True)
             .subquery('running_dag_run')
         )
 
@@ -529,16 +527,12 @@ class Airflow(BaseView):
             .join(LastDagRun, and_(
                 LastDagRun.c.dag_id == TI.dag_id,
                 LastDagRun.c.execution_date == TI.execution_date))
-            .filter(TI.task_id.in_(task_ids))
-            .filter(TI.dag_id.in_(dag_ids))
         )
         RunningTI = (
             session.query(TI.dag_id.label('dag_id'), TI.state.label('state'))
             .join(RunningDagRun, and_(
                 RunningDagRun.c.dag_id == TI.dag_id,
                 RunningDagRun.c.execution_date == TI.execution_date))
-            .filter(TI.task_id.in_(task_ids))
-            .filter(TI.dag_id.in_(dag_ids))
         )
 
         UnionTI = union_all(LastTI, RunningTI).alias('union_ti')
@@ -579,8 +573,8 @@ class Airflow(BaseView):
         dag = dagbag.get_dag(dag_id)
         title = dag_id
         try:
-            m = importlib.import_module(dag.module_name)
-            code = inspect.getsource(m)
+            with open(dag.fileloc, 'r') as f:
+                code = f.read()
             html_code = highlight(
                 code, lexers.PythonLexer(), HtmlFormatter(linenos=True))
         except IOError as e:
@@ -643,6 +637,7 @@ class Airflow(BaseView):
         return wwwutils.json_response(d)
 
     @expose('/pickle_info')
+    @login_required
     def pickle_info(self):
         d = {}
         dag_id = request.args.get('dag_id')
@@ -1086,6 +1081,7 @@ class Airflow(BaseView):
         origin = request.args.get('origin')
         dag = dagbag.get_dag(dag_id)
         task = dag.get_task(task_id)
+        task.dag = dag
 
         execution_date = request.args.get('execution_date')
         execution_date = dateutil.parser.parse(execution_date)
@@ -1094,110 +1090,39 @@ class Airflow(BaseView):
         downstream = request.args.get('downstream') == "true"
         future = request.args.get('future') == "true"
         past = request.args.get('past') == "true"
-        recursive = request.args.get('recursive') == "true"
-        MAX_PERIODS = 5000
 
-        # Flagging tasks as successful
-        session = settings.Session()
-        task_ids = [task_id]
-        dag_ids = [dag_id]
-        task_id_to_dag = {
-            task_id: dag
-        }
-        end_date = ((dag.latest_execution_date or datetime.now())
-                    if future else execution_date)
-
-        if 'start_date' in dag.default_args:
-            start_date = dag.default_args['start_date']
-        elif dag.start_date:
-            start_date = dag.start_date
-        else:
-            start_date = execution_date
-
-        start_date = execution_date if not past else start_date
-
-        if recursive:
-            recurse_tasks(task, task_ids, dag_ids, task_id_to_dag)
-
-        if downstream:
-            relatives = task.get_flat_relatives(upstream=False)
-            task_ids += [t.task_id for t in relatives]
-            if recursive:
-                recurse_tasks(relatives, task_ids, dag_ids, task_id_to_dag)
-        if upstream:
-            relatives = task.get_flat_relatives(upstream=False)
-            task_ids += [t.task_id for t in relatives]
-            if recursive:
-                recurse_tasks(relatives, task_ids, dag_ids, task_id_to_dag)
-        TI = models.TaskInstance
-
-        if dag.schedule_interval == '@once':
-            dates = [start_date]
-        else:
-            dates = dag.date_range(start_date, end_date=end_date)
-
-        tis = session.query(TI).filter(
-            TI.dag_id.in_(dag_ids),
-            TI.execution_date.in_(dates),
-            TI.task_id.in_(task_ids)).all()
-        tis_to_change = session.query(TI).filter(
-            TI.dag_id.in_(dag_ids),
-            TI.execution_date.in_(dates),
-            TI.task_id.in_(task_ids),
-            TI.state != State.SUCCESS).all()
-        tasks = list(product(task_ids, dates))
-        tis_to_create = list(
-            set(tasks) -
-            set([(ti.task_id, ti.execution_date) for ti in tis]))
-
-        tis_all_altered = list(chain(
-            [(ti.task_id, ti.execution_date) for ti in tis_to_change],
-            tis_to_create))
-
-        if len(tis_all_altered) > MAX_PERIODS:
-            flash("Too many tasks at once (>{0})".format(
-                MAX_PERIODS), 'error')
+        if not dag:
+            flash("Cannot find DAG: {}".format(dag_id))
             return redirect(origin)
+
+        if not task:
+            flash("Cannot find task {} in DAG {}".format(task_id, dag.dag_id))
+            return redirect(origin)
+
+        from airflow.api.common.experimental.mark_tasks import set_state
 
         if confirmed:
-            for ti in tis_to_change:
-                ti.state = State.SUCCESS
-            session.commit()
+            altered = set_state(task=task, execution_date=execution_date,
+                                upstream=upstream, downstream=downstream,
+                                future=future, past=past, state=State.SUCCESS,
+                                commit=True)
 
-            for task_id, task_execution_date in tis_to_create:
-                ti = TI(
-                    task=task_id_to_dag[task_id].get_task(task_id),
-                    execution_date=task_execution_date,
-                    state=State.SUCCESS)
-                session.add(ti)
-                session.commit()
-
-            session.commit()
-            session.close()
-            flash("Marked success on {} task instances".format(
-                len(tis_all_altered)))
-
+            flash("Marked success on {} task instances".format(len(altered)))
             return redirect(origin)
-        else:
-            if not tis_all_altered:
-                flash("No task instances to mark as successful", 'error')
-                response = redirect(origin)
-            else:
-                tis = []
-                for task_id, task_execution_date in tis_all_altered:
-                    tis.append(TI(
-                        task=task_id_to_dag[task_id].get_task(task_id),
-                        execution_date=task_execution_date,
-                        state=State.SUCCESS))
-                details = "\n".join([str(t) for t in tis])
 
-                response = self.render(
-                    'airflow/confirm.html',
-                    message=(
-                        "Here's the list of task instances you are about "
-                        "to mark as successful:"),
-                    details=details,)
-            return response
+        to_be_altered = set_state(task=task, execution_date=execution_date,
+                                  upstream=upstream, downstream=downstream,
+                                  future=future, past=past, state=State.SUCCESS,
+                                  commit=False)
+
+        details = "\n".join([str(t) for t in to_be_altered])
+
+        response = self.render("airflow/confirm.html",
+                               message=("Here's the list of task instances you are "
+                                        "about to mark as successful:"),
+                               details=details)
+
+        return response
 
     @expose('/exclude')
     @login_required
@@ -1325,7 +1250,8 @@ class Airflow(BaseView):
                 children_key = "_children"
 
             def set_duration(tid):
-                if isinstance(tid, dict) and tid.get("state") == State.RUNNING:
+                if (isinstance(tid, dict) and tid.get("state") == State.RUNNING and
+                        tid["start_date"] is not None):
                     d = datetime.now() - dateutil.parser.parse(tid["start_date"])
                     tid["duration"] = d.total_seconds()
                 return tid
@@ -1462,7 +1388,7 @@ class Airflow(BaseView):
             flash("No tasks found", "error")
         session.commit()
         session.close()
-        doc_md = markdown.markdown(dag.doc_md) if hasattr(dag, 'doc_md') else ''
+        doc_md = markdown.markdown(dag.doc_md) if hasattr(dag, 'doc_md') and dag.doc_md else ''
 
         refresh_rate = int(conf.get('webserver', 'graph_refresh_rate'))
         if not refresh_rate:
@@ -1521,25 +1447,41 @@ class Airflow(BaseView):
         cum_chart = nvd3.lineChart(
             name="cumLineChart", x_is_date=True, height=600, width="1200")
 
+        y = {}
+        x = {}
+        cum_y = {}
         for task in dag.tasks:
-            y = []
-            x = []
-            cum_y = []
+            y[task.task_id] = []
+            x[task.task_id] = []
+            cum_y[task.task_id] = []
             for ti in task.get_task_instances(session, start_date=min_date,
                                               end_date=base_date):
                 if ti.duration:
                     dttm = wwwutils.epoch(ti.execution_date)
-                    x.append(dttm)
-                    y.append(float(ti.duration) / (60*60))
+                    x[ti.task_id].append(dttm)
+                    y[ti.task_id].append(float(ti.duration))
                     fails = session.query(models.TaskFail).filter_by(
                         task_id=ti.task_id,
                         dag_id=ti.dag_id,
                         execution_date=ti.execution_date).all()
                     fails_total = sum([f.duration for f in fails])
-                    cum_y.append(float(ti.duration + fails_total) / (60*60))
-            if x:
-                chart.add_serie(name=task.task_id, x=x, y=y)
-                cum_chart.add_serie(name=task.task_id, x=x, y=cum_y)
+                    cum_y[ti.task_id].append(float(ti.duration + fails_total))
+        # determine the most relevant time unit for the set of task instance
+        # durations for the DAG
+        y_unit = infer_time_unit([d for t in y.values() for d in t])
+        cum_y_unit = infer_time_unit([d for t in cum_y.values() for d in t])
+        # update the y Axis on both charts to have the correct time units
+        chart.create_y_axis('yAxis', format='.02f', custom_format=False,
+                            label='Duration ({})'.format(y_unit))
+        cum_chart.create_y_axis('yAxis', format='.02f', custom_format=False,
+                                label='Duration ({})'.format(cum_y_unit))
+        for task in dag.tasks:
+            if x[task.task_id]:
+                chart.add_serie(name=task.task_id, x=x[task.task_id],
+                                y=scale_time_units(y[task.task_id], y_unit))
+                cum_chart.add_serie(name=task.task_id, x=x[task.task_id],
+                                    y=scale_time_units(cum_y[task.task_id],
+                                    cum_y_unit))
 
         tis = dag.get_task_instances(
             session, start_date=min_date, end_date=base_date)
@@ -1551,14 +1493,12 @@ class Airflow(BaseView):
 
         form = DateTimeWithNumRunsForm(data={'base_date': max_date,
                                              'num_runs': num_runs})
-        chart.buildhtml()
-        cum_chart.buildhtml()
-        cum_chart_body = html.document_fromstring(str(cum_chart)).find('body')
-        cum_chart_script = cum_chart_body.find('script')
-        s_index = cum_chart_script.text.rfind('});')
-        cum_chart_script.text = cum_chart_script.text[:s_index]\
-            + "$( document ).trigger('chartload')"\
-            + cum_chart_script.text[s_index:]
+        chart.buildcontent()
+        cum_chart.buildcontent()
+        s_index = cum_chart.htmlcontent.rfind('});')
+        cum_chart.htmlcontent = (cum_chart.htmlcontent[:s_index]
+                                 + "$( document ).trigger('chartload')"
+                                 + cum_chart.htmlcontent[s_index:])
 
         return self.render(
             'airflow/duration_chart.html',
@@ -1566,8 +1506,8 @@ class Airflow(BaseView):
             demo_mode=conf.getboolean('webserver', 'demo_mode'),
             root=root,
             form=form,
-            chart=chart,
-            cum_chart=html.tostring(cum_chart_body)
+            chart=chart.htmlcontent,
+            cum_chart=cum_chart.htmlcontent
         )
 
     @expose('/tries')
@@ -1621,7 +1561,7 @@ class Airflow(BaseView):
         form = DateTimeWithNumRunsForm(data={'base_date': max_date,
                                              'num_runs': num_runs})
 
-        chart.buildhtml()
+        chart.buildcontent()
 
         return self.render(
             'airflow/chart.html',
@@ -1629,7 +1569,7 @@ class Airflow(BaseView):
             demo_mode=conf.getboolean('webserver', 'demo_mode'),
             root=root,
             form=form,
-            chart=chart
+            chart=chart.htmlcontent
         )
 
     @expose('/landing_times')
@@ -1660,21 +1600,32 @@ class Airflow(BaseView):
 
         chart = nvd3.lineChart(
             name="lineChart", x_is_date=True, height=600, width="1200")
+        y = {}
+        x = {}
         for task in dag.tasks:
-            y = []
-            x = []
+            y[task.task_id] = []
+            x[task.task_id] = []
             for ti in task.get_task_instances(session, start_date=min_date,
                                               end_date=base_date):
                 ts = ti.execution_date
-                if dag.schedule_interval:
+                if dag.schedule_interval and dag.following_schedule(ts):
                     ts = dag.following_schedule(ts)
                 if ti.end_date:
                     dttm = wwwutils.epoch(ti.execution_date)
-                    secs = old_div((ti.end_date - ts).total_seconds(), 60*60)
-                    x.append(dttm)
-                    y.append(secs)
-            if x:
-                chart.add_serie(name=task.task_id, x=x, y=y)
+                    secs = (ti.end_date - ts).total_seconds()
+                    x[ti.task_id].append(dttm)
+                    y[ti.task_id].append(secs)
+
+        # determine the most relevant time unit for the set of landing times
+        # for the DAG
+        y_unit = infer_time_unit([d for t in y.values() for d in t])
+        # update the y Axis to have the correct time units
+        chart.create_y_axis('yAxis', format='.02f', custom_format=False,
+                            label='Landing Time ({})'.format(y_unit))
+        for task in dag.tasks:
+            if x[task.task_id]:
+                chart.add_serie(name=task.task_id, x=x[task.task_id],
+                                y=scale_time_units(y[task.task_id], y_unit))
 
         tis = dag.get_task_instances(
                 session, start_date=min_date, end_date=base_date)
@@ -1686,10 +1637,11 @@ class Airflow(BaseView):
 
         form = DateTimeWithNumRunsForm(data={'base_date': max_date,
                                              'num_runs': num_runs})
+        chart.buildcontent()
         return self.render(
             'airflow/chart.html',
             dag=dag,
-            chart=chart,
+            chart=chart.htmlcontent,
             height="700px",
             demo_mode=conf.getboolean('webserver', 'demo_mode'),
             root=root,
@@ -2275,7 +2227,7 @@ class VariableView(wwwutils.DataProfilingMixin, AirflowModelView):
             form.val.data = '*' * 8
 
 
-class XComView(wwwutils.LoginMixin, AirflowModelView):
+class XComView(wwwutils.SuperUserMixin, AirflowModelView):
     verbose_name = "XCom"
     verbose_name_plural = "XComs"
     page_size = 20
@@ -2350,9 +2302,8 @@ class DagRunModelView(ModelViewOnly):
         session.commit()
         dirty_ids = []
         for row in deleted:
-            models.DagStat.set_dirty(row.dag_id, session=session)
             dirty_ids.append(row.dag_id)
-        models.DagStat.clean_dirty(dirty_ids, session=session)
+        models.DagStat.update(dirty_ids, dirty_only=False, session=session)
         session.close()
 
     @action('set_running', "Set state to 'running'", None)
@@ -2382,7 +2333,7 @@ class DagRunModelView(ModelViewOnly):
                 else:
                     dr.end_date = datetime.now()
             session.commit()
-            models.DagStat.clean_dirty(dirty_ids, session=session)
+            models.DagStat.update(dirty_ids, session=session)
             flash(
                 "{count} dag runs were set to '{target_state}'".format(**locals()))
         except Exception as ex:
@@ -2616,7 +2567,7 @@ class VersionView(wwwutils.SuperUserMixin, LoggingMixin, BaseView):
     def version(self):
         # Look at the version from setup.py
         try:
-            airflow_version = pkg_resources.require("airflow")[0].version
+            airflow_version = pkg_resources.require("apache-airflow")[0].version
         except Exception as e:
             airflow_version = None
             self.logger.error(e)

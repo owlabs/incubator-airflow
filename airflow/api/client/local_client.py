@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+    # -*- coding: utf-8 -*-
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,9 @@ from airflow.api.common.experimental import trigger_dag
 
 
 class Client(api_client.Client):
-    def trigger_dag(self, dag_id, run_id=None, conf=None):
-        dr = trigger_dag.trigger_dag(dag_id=dag_id, run_id=run_id, conf=conf)
+    def trigger_dag(self, dag_id, run_id=None, conf=None, execution_date=None):
+        dr = trigger_dag.trigger_dag(dag_id=dag_id,
+                                     run_id=run_id,
+                                     conf=conf,
+                                     execution_date=execution_date)
         return "Created {}".format(dr)

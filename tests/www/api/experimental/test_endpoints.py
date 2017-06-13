@@ -13,7 +13,7 @@
 # limitations under the License.
 import unittest
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote
 from airflow.api.common.experimental.trigger_dag import trigger_dag
 from airflow.models import XCom, DagBag
@@ -36,7 +36,7 @@ class ApiExperimentalTests(unittest.TestCase):
         assert '"email"' in response.data.decode('utf-8')
         assert 'error' not in response.data.decode('utf-8')
         self.assertEqual(200, response.status_code)
-       
+
         response = self.app.get(url_template.format('example_bash_operator', 'DNE'))
         assert 'error' in response.data.decode('utf-8')
         self.assertEqual(404, response.status_code)
@@ -63,16 +63,19 @@ class ApiExperimentalTests(unittest.TestCase):
         self.assertEqual(404, response.status_code)
 
     def test_trigger_dag_for_date(self):
-        url_template = '/api/experimental/dags/{}/dag_runs/{}'
+        url_template = '/api/experimental/dags/{}/dag_runs'
         dag_id = 'example_bash_operator'
-        now = datetime.now()
-        execution_date = datetime(now.year, now.month, now.day, now.hour + 1)
+        hour_from_now = datetime.now() + timedelta(hours=1)
+        execution_date = datetime(hour_from_now.year,
+                                  hour_from_now.month,
+                                  hour_from_now.day,
+                                  hour_from_now.hour)
         datetime_string = execution_date.isoformat()
 
         # Test Correct execution
         response = self.app.post(
-            quote(url_template.format(dag_id, datetime_string)),
-            data=json.dumps(dict(run_id='my_run'.format(datetime_string))),
+            url_template.format(dag_id),
+            data=json.dumps(dict(execution_date=datetime_string)),
             content_type="application/json"
         )
         self.assertEqual(200, response.status_code)
@@ -86,17 +89,16 @@ class ApiExperimentalTests(unittest.TestCase):
 
         # Test error for nonexistent dag
         response = self.app.post(
-            quote(url_template.format('does_not_exist_dag', datetime_string)),
-            data=json.dumps(dict()),
+            url_template.format('does_not_exist_dag'),
+            data=json.dumps(dict(execution_date=execution_date.isoformat())),
             content_type="application/json"
         )
         self.assertEqual(404, response.status_code)
 
         # Test error for bad datetime format
         response = self.app.post(
-            quote(
-                url_template.format(dag_id, 'not_a_datetime')),
-            data=json.dumps(dict(run_id='my_run'.format(datetime_string))),
+            url_template.format(dag_id),
+            data=json.dumps(dict(execution_date='not_a_datetime')),
             content_type="application/json"
         )
         self.assertEqual(400, response.status_code)

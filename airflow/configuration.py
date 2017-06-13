@@ -166,6 +166,13 @@ donot_pickle = False
 # How long before timing out a python file import while filling the DagBag
 dagbag_import_timeout = 30
 
+# The class to use for running task instances in a subprocess
+task_runner = BashTaskRunner
+
+# If set, tasks without a `run_as_user` argument will be run with this user
+# Can be used to de-elevate a sudo user running Airflow when executing tasks
+default_impersonation =
+
 # What security module to use (for example kerberos):
 security =
 
@@ -240,7 +247,7 @@ error_logfile = -
 expose_config = False
 
 # Set to true to turn on authentication:
-# http://pythonhosted.org/airflow/installation.html#web-authentication
+# http://pythonhosted.org/airflow/security.html#web-authentication
 authenticate = False
 
 # Filter the list of dags by owner name (requires authentication to be enabled)
@@ -285,9 +292,10 @@ email_backend = airflow.utils.email.send_email_smtp
 smtp_host = localhost
 smtp_starttls = True
 smtp_ssl = False
-smtp_user = airflow
+# Uncomment and set the user/pass settings if you want to use SMTP AUTH
+# smtp_user = airflow
+# smtp_password = airflow
 smtp_port = 25
-smtp_password = airflow
 smtp_mail_from = airflow@airflow.com
 
 
@@ -359,12 +367,20 @@ dag_dir_list_interval = 300
 # How often should stats be printed to the logs
 print_stats_interval = 30
 
-child_process_log_directory = /tmp/airflow/scheduler/logs
+child_process_log_directory = {AIRFLOW_HOME}/logs/scheduler
 
 # Local task jobs periodically heartbeat to the DB. If the job has
 # not heartbeat in this many seconds, the scheduler will mark the
 # associated task instance as failed and will re-schedule the task.
 scheduler_zombie_task_threshold = 300
+
+# Turn off scheduler catchup by setting this to False.
+# Default behavior is unchanged and
+# Command Line Backfills still work, but the scheduler
+# will not do scheduler catchup if this is False,
+# however it can be set on a per DAG basis in the
+# DAG definition (catchup)
+catchup_by_default = True
 
 # Statsd (https://github.com/etsy/statsd) integration settings
 statsd_on = False
@@ -496,6 +512,9 @@ job_heartbeat_sec = 1
 scheduler_heartbeat_sec = 5
 authenticate = true
 max_threads = 2
+catchup_by_default = True
+scheduler_zombie_task_threshold = 300
+dag_dir_list_interval = 0
 """
 
 _log = logging.getLogger(__name__)
@@ -551,7 +570,7 @@ class AirflowConfigParser(ConfigParser):
         elif (
             self.getboolean("webserver", "authenticate") and
             self.get("webserver", "owner_mode").lower() == 'ldapgroup' and
-            self.get("core", "auth_backend") != (
+            self.get("webserver", "auth_backend") != (
                 'airflow.contrib.auth.backends.ldap_auth')
         ):
             raise AirflowConfigException(
@@ -584,7 +603,7 @@ class AirflowConfigParser(ConfigParser):
 
         # first check environment variables
         option = self._get_env_var_option(section, key)
-        if option:
+        if option is not None:
             return option
 
         # ...then the config file
@@ -821,9 +840,3 @@ as_dict.__doc__ = conf.as_dict.__doc__
 
 def set(section, option, value):  # noqa
     return conf.set(section, option, value)
-
-########################
-# convenience method to access config entries
-
-def get_dags_folder():
-    return os.path.expanduser(get('core', 'DAGS_FOLDER'))
