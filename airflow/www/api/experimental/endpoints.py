@@ -16,6 +16,8 @@ import logging
 import airflow.api
 
 from airflow.api.common.experimental import trigger_dag as trigger
+from airflow.api.common.experimental.get_dag import get_dag
+from airflow.api.common.experimental.get_dag_run import get_dag_run
 from airflow.api.common.experimental.get_task import get_task
 from airflow.api.common.experimental.get_task_instance import get_task_instance
 from airflow.exceptions import AirflowException
@@ -84,6 +86,68 @@ def trigger_dag(dag_id):
 
     response = jsonify(message="Created {}".format(dr))
     return response
+
+
+@csrf.exempt
+@api_experimental.route('/dags/<string:dag_id>', methods=['GET'])
+@requires_authentication
+def dag_info(dag_id):
+    """
+    Returns a JSON with a DAG's public instance variables as well
+    as how many dag runs are in progress.
+    """
+
+    try:
+        dag = get_dag(dag_id)
+        active_run_dates = dag.get_active_runs()
+        info = {k: str(v)
+                for k, v in vars(dag).items()
+                if not k.startswith('_')}
+        info['active_runs'] = active_run_dates
+        return jsonify(info)
+    except AirflowException as err:
+        _log.info(err)
+        response = jsonify(error="{}".format(err))
+        response.status_code = 404
+        return response
+
+
+@csrf.exempt
+@api_experimental.route('/dags/<string:dag_id>/dag_runs/<string:execution_date>', methods=['GET'])
+@requires_authentication
+def dag_run_info(dag_id, execution_date):
+    """
+    Returns a JSON with a DAG Run's public instance variables.
+    """
+
+    # Convert string datetime into actual datetime
+    try:
+        execution_date = datetime.strptime(execution_date,
+                                           '%Y-%m-%dT%H:%M:%S')
+    except ValueError:
+        error_message = (
+            'Given execution date, {}, could not be identified '
+            'as a date. Example date format: 2015-11-16T14:34:15'
+            .format(execution_date))
+        _log.info(error_message)
+        response = jsonify({'error': error_message})
+        response.status_code = 400
+
+        return response
+
+    try:
+        dag_run = get_dag_run(dag_id, execution_date)
+        info = {k: str(v)
+                for k, v in vars(dag_run).items()
+                if not k.startswith('_')}
+        task_instances = dag_run.get_task_instances()
+        info['task_instances'] = task_instances
+        return jsonify(info)
+    except AirflowException as err:
+        _log.info(err)
+        response = jsonify(error="{}".format(err))
+        response.status_code = 404
+        return response
 
 
 @api_experimental.route('/test', methods=['GET'])
