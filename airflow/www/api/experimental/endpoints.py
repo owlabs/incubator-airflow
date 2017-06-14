@@ -142,7 +142,9 @@ def dag_run_info(dag_id, execution_date):
                 for k, v in vars(dag_run).items()
                 if not k.startswith('_')}
         task_instances = dag_run.get_task_instances()
-        info['task_instances'] = task_instances
+        info['task_instances'] = [{k: str(v)
+                                   for k, v in vars(instance).items()
+                                   if not k.startswith('_')} for instance in task_instances]
         return jsonify(info)
     except AirflowException as err:
         _log.info(err)
