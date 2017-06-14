@@ -16,6 +16,8 @@ import logging
 import airflow.api
 
 from airflow.api.common.experimental import trigger_dag as trigger
+from airflow.api.common.experimental.get_task import get_task
+from airflow.api.common.experimental.get_task_instance import get_task_instance
 from airflow.exceptions import AirflowException
 from airflow.www.app import csrf
 from airflow import models
@@ -85,56 +87,6 @@ def trigger_dag(dag_id):
     return response
 
 
-@csrf.exempt
-@api_experimental.route('/dags/<string:dag_id>/dag_runs/<string:execution_date>', methods=['POST'])
-@requires_authentication
-def trigger_dag_for_date(dag_id, execution_date):
-    """
-    Trigger a new dag run for a Dag with the given execution date. The
-    format for the execution date is expected to be "YYYY-mm-DDTHH:MM:SS",
-    for example: "2016-11-16T11:34:15". The colons ought to be escaped to %3A,
-    as you would expect, within the URL. These are then automatically replaced
-    by Flask before being passed into this method.
-    """
-    data = request.get_json(force=True)
-
-    run_id = None
-    if 'run_id' in data:
-        run_id = data['run_id']
-
-    conf = None
-    if 'conf' in data:
-        conf = data['conf']
-
-    # Convert string datetime into actual datetime
-    try:
-        execution_date = datetime.strptime(execution_date,
-                                           '%Y-%m-%dT%H:%M:%S')
-    except ValueError:
-        error_message = (
-            'Given execution date, {}, could not be identified '
-            'as a date. Example date format: 2015-11-16T14:34:15'
-            .format(execution_date))
-        _log.info(error_message)
-        response = jsonify({'error': error_message})
-        response.status_code = 400
-
-        return response
-
-    try:
-        dr = trigger.trigger_dag(dag_id, run_id, conf, execution_date)
-    except AirflowException as err:
-        response = jsonify(error="{}".format(err))
-        response.status_code = 404
-        return response
-
-    if getattr(g, 'user', None):
-        _log.info("User {} created {}".format(g.user, dr))
-
-    response = jsonify(message="Created {}".format(dr))
-    return response
-
-
 @api_experimental.route('/test', methods=['GET'])
 @requires_authentication
 def test():
@@ -145,22 +97,19 @@ def test():
 @requires_authentication
 def task_info(dag_id, task_id):
     """Returns a JSON with a task's public instance variables. """
-    from airflow.www.views import dagbag
 
-    if dag_id not in dagbag.dags:
-        response = jsonify(error='Dag {} not found'.format(dag_id))
+    try:
+        info = get_task(dag_id, task_id)
+    except AirflowException as err:
+        _log.info(err)
+        response = jsonify(error="{}".format(err))
         response.status_code = 404
         return response
 
-    dag = dagbag.dags[dag_id]
-    if not dag.has_task(task_id):
-        response = (jsonify(error='Task {} not found in dag {}'
-                    .format(task_id, dag_id)))
-        response.status_code = 404
-        return response
-
-    task = dag.get_task(task_id)
-    fields = {k: str(v) for k, v in vars(task).items() if not k.startswith('_')}
+    # JSONify and return.
+    fields = {k: str(v)
+              for k, v in vars(info).items()
+              if not k.startswith('_')}
     return jsonify(fields)
 
 
@@ -183,26 +132,20 @@ def latest_dag_runs():
             })
     return jsonify(payload)
     
-@api_experimental.route('/dags/<string:dag_id>/tasks/<string:task_id>/instances/<string:execution_date>', methods=['GET'])
+@api_experimental.route('/dags/<string:dag_id>/dag_runs/<string:execution_date>/tasks/<string:task_id>', methods=['GET'])
 @requires_authentication
-def task_instance_info(dag_id, task_id, execution_date):
+def task_instance_info(dag_id, execution_date, task_id):
     """
-    Returns a JSON with a task instance's public instance variables. The
-    format for the execution date is expected to be "YYYY-mm-DDTHH:MM:SS",
-    for example: "2016-11-16T11:34:15". The colons ought to be escaped to %3A,
-    as you would expect, within the URL. These are then automatically replaced
-    by Flask before being passed into this method.
+    Returns a JSON with a task instance's public instance variables.
+    The format for the exec_date is expected to be
+    "YYYY-mm-DDTHH:MM:SS", for example: "2016-11-16T11:34:15". This will
+    of course need to have been encoded for URL in the request.
     """
-    from airflow.www.views import dagbag
-
-    _log.info('TaskState API called with parameters: dag_id: {}; '
-              'task_id: {}; execution_date: {}'.format(dag_id,
-                                                       task_id,
-                                                       execution_date))
 
     # Convert string datetime into actual datetime
     try:
-        execution_date = datetime.strptime(execution_date, '%Y-%m-%dT%H:%M:%S')
+        execution_date = datetime.strptime(execution_date,
+                                           '%Y-%m-%dT%H:%M:%S')
     except ValueError:
         error_message = (
             'Given execution date, {}, could not be identified '
@@ -214,42 +157,17 @@ def task_instance_info(dag_id, task_id, execution_date):
 
         return response
 
-    # Check DAG exists
-    if dag_id not in dagbag.dags:
-        error_message = 'Dag {} not found'.format(dag_id)
-        response = jsonify(error=error_message)
-        response.status_code = 404
-        return response
-
-    # Get DAG object and check task exists
-    dag = dagbag.dags[dag_id]
-    if not dag.has_task(task_id):
-        error_message = 'Task {} not found in dag {}'.format(task_id, dag_id)
-        response = jsonify(error=error_message)
-        response.status_code = 404
-        return response
-
-    # Get DagRun object and check that it exists
-    dagrun = dag.get_dagrun(execution_date=execution_date)
-    if not dagrun:
-        error_message = ('Dag Run for date {} not found in dag {}'
-                         .format(execution_date, dag_id))
-        response = jsonify(error=error_message)
-        response.status_code = 404
-        return response
-
-    # Get task instance object and check that it exists
-    task_instance = dagrun.get_task_instance(task_id)
-    if not task_instance:
-        error_message = ('Task {} instance for date {} not found'
-                         .format(task_id, execution_date))
-        response = jsonify(error=error_message)
+    try:
+        info = get_task_instance(dag_id, task_id, execution_date)
+    except AirflowException as err:
+        _log.info(err)
+        response = jsonify(error="{}".format(err))
         response.status_code = 404
         return response
 
     # JSONify and return.
     fields = {k: str(v)
-              for k, v in vars(task_instance).items()
+              for k, v in vars(info).items()
               if not k.startswith('_')}
     return jsonify(fields)
 
