@@ -14,6 +14,7 @@
 import logging
 
 import airflow.api
+import airflow.models
 
 from airflow.api.common.experimental import trigger_dag as trigger
 from airflow.api.common.experimental.get_dag import get_dag
@@ -103,7 +104,7 @@ def dag_info(dag_id):
         info = {k: str(v)
                 for k, v in vars(dag).items()
                 if not k.startswith('_')}
-        info['active_runs'] = active_run_dates
+        info['active_runs'] = [date.isoformat() for date in active_run_dates]
         return jsonify(info)
     except AirflowException as err:
         _log.info(err)
