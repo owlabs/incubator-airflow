@@ -14,7 +14,6 @@
 import logging
 
 import airflow.api
-import airflow.models
 
 from airflow.api.common.experimental import trigger_dag as trigger
 from airflow.api.common.experimental.get_dag import get_dag
@@ -23,6 +22,7 @@ from airflow.api.common.experimental.get_task import get_task
 from airflow.api.common.experimental.get_task_instance import get_task_instance
 from airflow.exceptions import AirflowException
 from airflow.www.app import csrf
+from airflow import models
 
 from flask import (
     g, Markup, Blueprint, redirect, jsonify, abort,
