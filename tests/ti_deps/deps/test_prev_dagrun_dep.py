@@ -120,4 +120,7 @@ class PrevDagrunDepTest(unittest.TestCase):
                   execution_date=datetime(2016, 1, 2))
         dep_context = DepContext(ignore_depends_on_past=False)
 
+        failure_reasons = PrevDagrunDep().get_failure_reasons(ti=ti, dep_context=dep_context)
+        for reason in failure_reasons:
+            print('Dependency not met because: {}'.format(reason))
         self.assertTrue(PrevDagrunDep().is_met(ti=ti, dep_context=dep_context))
