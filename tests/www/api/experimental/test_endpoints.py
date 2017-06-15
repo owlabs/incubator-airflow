@@ -104,7 +104,7 @@ class ApiExperimentalTests(unittest.TestCase):
         self.assertEqual(400, response.status_code)
 
     def test_task_instance_info(self):
-        url_template = '/api/experimental/dags/{}/dag_runs/{}/tasks/<{]'
+        url_template = '/api/experimental/dags/{}/dag_runs/{}/tasks/{}'
         dag_id = 'example_bash_operator'
         task_id = 'also_run_this'
         execution_date = datetime.now().replace(microsecond=0)
