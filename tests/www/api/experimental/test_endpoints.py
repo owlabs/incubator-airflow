@@ -19,6 +19,7 @@ from airflow.api.common.experimental.trigger_dag import trigger_dag
 from airflow.models import XCom, DagBag
 
 import json
+import time
 
 
 class ApiExperimentalTests(unittest.TestCase):
@@ -47,6 +48,9 @@ class ApiExperimentalTests(unittest.TestCase):
 
     def test_trigger_dag(self):
         url_template = '/api/experimental/dags/{}/dag_runs'
+        # wait 1 second to prevent this being run on the same second as another test
+        # to ensure that the dag run gets a unique execution_date.
+        time.sleep(1)
         response = self.app.post(
             url_template.format('example_bash_operator'),
             data=json.dumps(dict(run_id='my_run' + datetime.now().isoformat())),
@@ -104,7 +108,7 @@ class ApiExperimentalTests(unittest.TestCase):
         self.assertEqual(400, response.status_code)
 
     def test_task_instance_info(self):
-        url_template = '/api/experimental/dags/{}/tasks/{}/instances/{}'
+        url_template = '/api/experimental/dags/{}/dag_runs/{}/tasks/{}'
         dag_id = 'example_bash_operator'
         task_id = 'also_run_this'
         execution_date = datetime.now().replace(microsecond=0)
@@ -118,7 +122,7 @@ class ApiExperimentalTests(unittest.TestCase):
 
         # Test Correct execution
         response = self.app.get(
-            quote(url_template.format(dag_id, task_id, datetime_string))
+            quote(url_template.format(dag_id, datetime_string, task_id))
         )
         self.assertEqual(200, response.status_code)
         assert 'state' in response.data.decode('utf-8')
@@ -127,31 +131,31 @@ class ApiExperimentalTests(unittest.TestCase):
         # Test error for nonexistent dag
         response = self.app.get(
             quote(url_template.format('does_not_exist_dag',
-                                      task_id,
-                                      datetime_string))
+                                      datetime_string,
+                                      task_id))
         )
         self.assertEqual(404, response.status_code)
 
         # Test error for nonexistent task
         response = self.app.get(
             quote(url_template.format(dag_id,
-                                      'does_not_exist_task',
-                                      datetime_string))
+                                      datetime_string,
+                                      'does_not_exist_task'))
         )
         self.assertEqual(404, response.status_code)
 
         # Test error for nonexistent dag run (wrong execution_date)
         response = self.app.get(
             quote(url_template.format(dag_id,
-                                      task_id,
-                                      wrong_datetime_string))
+                                      wrong_datetime_string,
+                                      task_id))
         )
         self.assertEqual(404, response.status_code)
 
         # Test error for bad datetime format
         response = self.app.get(
             quote(
-                url_template.format(dag_id, task_id, 'not_a_datetime'))
+                url_template.format(dag_id, 'not_a_datetime', task_id))
         )
         self.assertEqual(400, response.status_code)
 
