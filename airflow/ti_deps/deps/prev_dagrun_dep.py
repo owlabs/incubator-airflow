@@ -70,7 +70,7 @@ class PrevDagrunDep(BaseTIDep):
             yield self._failing_status(
                 reason="depends_on_past is true for this task, but the previous task "
                        "instance {0} is in the state '{1}' which is not a successful "
-                       "state.".format(previous_ti, previous_ti.state))
+                       "state.".format(previous_ti, previous_ti.state_for_dependents()))
 
         previous_ti.task = ti.task
         if (ti.task.wait_for_downstream and
