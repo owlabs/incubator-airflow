@@ -66,11 +66,12 @@ class PrevDagrunDep(BaseTIDep):
                        "task instance has not run yet.")
             raise StopIteration
 
-        if previous_ti.state_for_dependents() not in {State.SKIPPED, State.SUCCESS}:
+        previous_ti_state = previous_ti.state_for_dependents()
+        if previous_ti_state not in {State.SKIPPED, State.SUCCESS}:
             yield self._failing_status(
                 reason="depends_on_past is true for this task, but the previous task "
                        "instance {0} is in the state '{1}' which is not a successful "
-                       "state.".format(previous_ti, previous_ti.state_for_dependents()))
+                       "state.".format(previous_ti, previous_ti_state))
 
         previous_ti.task = ti.task
         if (ti.task.wait_for_downstream and
