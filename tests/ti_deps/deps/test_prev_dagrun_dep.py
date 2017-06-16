@@ -115,6 +115,7 @@ class PrevDagrunDepTest(unittest.TestCase):
                               start_date=datetime(2016, 1, 1),
                               wait_for_downstream=True)
         prev_ti = Mock(state=State.SUCCESS,
+                       state_for_dependents=Mock(return_value=State.SUCCESS),
                        are_dependents_done=Mock(return_value=True))
         ti = Mock(task=task, previous_ti=prev_ti,
                   execution_date=datetime(2016, 1, 2))
