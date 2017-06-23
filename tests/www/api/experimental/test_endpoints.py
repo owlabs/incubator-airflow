@@ -19,6 +19,7 @@ from airflow.api.common.experimental.trigger_dag import trigger_dag
 from airflow.models import XCom, DagBag
 
 import json
+import time
 
 
 class ApiExperimentalTests(unittest.TestCase):
@@ -47,6 +48,9 @@ class ApiExperimentalTests(unittest.TestCase):
 
     def test_trigger_dag(self):
         url_template = '/api/experimental/dags/{}/dag_runs'
+        # wait 1 second to prevent this being run on the same second as another test
+        # to ensure that the dag run gets a unique execution_date.
+        time.sleep(1)
         response = self.app.post(
             url_template.format('example_bash_operator'),
             data=json.dumps(dict(run_id='my_run' + datetime.now().isoformat())),
