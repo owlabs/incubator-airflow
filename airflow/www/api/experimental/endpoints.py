@@ -121,20 +121,20 @@ def dag_run_info(dag_id, execution_date):
     Returns a JSON with a DAG Run's public instance variables.
     """
 
-        # Convert string datetime into actual datetime
-        try:
-            execution_date = datetime.strptime(execution_date,
-                                               '%Y-%m-%dT%H:%M:%S')
-        except ValueError:
-            error_message = (
-                'Given execution date, {}, could not be identified '
-                'as a date. Example date format: 2015-11-16T14:34:15'
-                .format(execution_date))
-            _log.info(error_message)
-            response = jsonify({'error': error_message})
-            response.status_code = 400
+    # Convert string datetime into actual datetime
+    try:
+        execution_date = datetime.strptime(execution_date,
+                                            '%Y-%m-%dT%H:%M:%S')
+    except ValueError:
+        error_message = (
+            'Given execution date, {}, could not be identified '
+            'as a date. Example date format: 2015-11-16T14:34:15'
+            .format(execution_date))
+        _log.info(error_message)
+        response = jsonify({'error': error_message})
+        response.status_code = 400
 
-            return response
+        return response
 
     try:
         dag_run = get_dag_run(dag_id, execution_date)
@@ -197,7 +197,7 @@ def latest_dag_runs():
                                        execution_date=dagrun.execution_date)
             })
     return jsonify(payload)
-    
+
 @api_experimental.route('/dags/<string:dag_id>/dag_runs/<string:execution_date>/tasks/<string:task_id>', methods=['GET'])
 @requires_authentication
 def task_instance_info(dag_id, execution_date, task_id):
