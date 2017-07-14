@@ -141,6 +141,7 @@ def dag_run_info(dag_id, execution_date):
         info = {k: str(v)
                 for k, v in vars(dag_run).items()
                 if not k.startswith('_')}
+        info['state'] = dag_run.get_state()
         task_instances = dag_run.get_task_instances()
         info['task_instances'] = [{k: str(v)
                                    for k, v in vars(instance).items()
