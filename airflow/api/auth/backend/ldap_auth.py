@@ -15,16 +15,16 @@
 import logging
 from functools import wraps
 
-from airflow import configuration as conf
-from airflow.contrib.auth.backends.ldap_auth import LdapUser
-
 from flask import Response
-from flask import _request_ctx_stack as stack
 from flask import make_response
 from flask import request
-from flask import g
+
+from airflow.contrib.auth.backends.ldap_auth import LdapUser
 
 _log = logging.getLogger(__name__)
+
+client_auth = None
+requires_authentication = True
 
 
 def init_app(app):
