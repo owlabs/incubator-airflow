@@ -24,7 +24,6 @@ from airflow.contrib.auth.backends.ldap_auth import LdapUser
 _log = logging.getLogger(__name__)
 
 client_auth = None
-requires_authentication = True
 
 
 def init_app(app):
@@ -40,17 +39,16 @@ def _unauthorized():
     Indicate that authorization is required
     :return:
     """
-    return Response("Unauthorized", 401)
+    return Response("Unauthorized", 401, {'WWW-Authenticate': 'Basic realm="Login Required"'})
 
 
 def requires_authentication(function):
     @wraps(function)
     def decorated(*args, **kwargs):
-        header = request.headers.get("Authorization")
-        if header:
-            _log.debug(header)
+        auth = request.authorization
+        if auth:
             try:
-                LdapUser.try_login(header.username, header.password)
+                LdapUser.try_login(auth.username, auth.password)
                 response = function(*args, **kwargs)
                 response = make_response(response)
                 return response
