@@ -35,6 +35,14 @@ def _forbidden():
     return Response("Forbidden", 403)
 
 
+def _unauthorized():
+    """
+    Indicate that authorization is required
+    :return:
+    """
+    return Response("Unauthorized", 401)
+
+
 def requires_authentication(function):
     @wraps(function)
     def decorated(*args, **kwargs):
@@ -48,5 +56,6 @@ def requires_authentication(function):
                 return response
             except Exception as exception:
                 _log.info("API login failure: {}".format(exception))
-        return _forbidden()
+            return _forbidden()
+        return _unauthorized()
     return decorated
