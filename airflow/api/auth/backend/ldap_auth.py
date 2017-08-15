@@ -27,33 +27,50 @@ client_auth = None
 
 
 def init_app(app):
+    """
+    Initialisation function. Current empty, but required.
+    """
     pass
 
 
 def _forbidden():
+    """
+    Indicate that the given authorization is not valid.
+    :return: Flask response object detailing that the user is unauthorized.
+    """
     return Response("Forbidden", 403)
 
 
 def _unauthorized():
     """
-    Indicate that authorization is required
-    :return:
+    Indicate that authorization is required.
+    :return: Flask response object detailing that unauthorization has not been provided.
     """
     return Response("Unauthorized", 401, {'WWW-Authenticate': 'Basic realm="Login Required"'})
 
 
 def requires_authentication(function):
+    """
+    Function to perform authorization and return the appropriate response.
+    """
     @wraps(function)
     def decorated(*args, **kwargs):
+        # Get authorization header object from the current request.
         auth = request.authorization
+        # If there is an authorization header attempt to authenticate.
         if auth:
             try:
+                # Call to the existing LDAP Auth module to try and log the user in.
                 LdapUser.try_login(auth.username, auth.password)
+                # Once authenticated, get the response and return it.
                 response = function(*args, **kwargs)
                 response = make_response(response)
                 return response
             except Exception as exception:
+                # If the user could not be logged in, then log thusly and continue.
                 _log.info("API login failure: {}".format(exception))
+            # If we've got here then the user hasn't been able to authenticate, so return the forbidden response.
             return _forbidden()
+        # If we've got here there is no authorization header, so return the unauthorized response.
         return _unauthorized()
     return decorated
