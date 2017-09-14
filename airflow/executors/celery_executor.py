@@ -57,6 +57,7 @@ class CeleryConfig(object):
             self.BROKER_TRANSPORT_OPTIONS['region'] = configuration.get(
                 'celery',
                 'SQS_REGION')
+            _log.info('SQS_REGION configuration loaded')
         except AirflowConfigException:
             pass
 
@@ -64,6 +65,7 @@ class CeleryConfig(object):
             self.BROKER_TRANSPORT_OPTIONS['visibility_timeout'] = configuration.get(
                 'celery',
                 'SQS_VISIBILITY_TIMEOUT')
+            _log.info('SQS_VISIBILITY_TIMEOUT configuration loaded')
         except AirflowConfigException:
             pass
 
@@ -71,6 +73,7 @@ class CeleryConfig(object):
             self.BROKER_TRANSPORT_OPTIONS['polling_interval'] = configuration.get(
                 'celery',
                 'SQS_POLLING_INTERVAL')
+            _log.info('SQS_POLLING_INTERVAL configuration loaded')
         except AirflowConfigException:
             pass
 
@@ -78,6 +81,7 @@ class CeleryConfig(object):
             self.BROKER_TRANSPORT_OPTIONS['queue_name_prefix'] = configuration.get(
                 'celery',
                 'SQS_QUEUE_NAME_PREFIX')
+            _log.info('SQS_QUEUE_NAME_PREFIX configuration loaded')
         except AirflowConfigException:
             pass
 
