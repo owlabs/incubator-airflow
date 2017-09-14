@@ -35,6 +35,42 @@ airflow worker
 
 DEFAULT_QUEUE = configuration.get('celery', 'DEFAULT_QUEUE')
 
+SQS_REGION = None
+try:
+    SQS_REGION = configuration.get(
+        'celery',
+        'SQS_REGION')
+    _log.info('SQS_REGION configuration loaded')
+except AirflowConfigException:
+    _log.info('SQS_REGION configuration was not loaded')
+
+SQS_VISIBILITY_TIMEOUT = None
+try:
+    SQS_VISIBILITY_TIMEOUT = configuration.get(
+        'celery',
+        'SQS_VISIBILITY_TIMEOUT')
+    _log.info('SQS_VISIBILITY_TIMEOUT configuration loaded')
+except AirflowConfigException:
+    _log.info('SQS_VISIBILITY_TIMEOUT configuration was not loaded')
+
+SQS_POLLING_INTERVAL = None
+try:
+    SQS_POLLING_INTERVAL = configuration.get(
+        'celery',
+        'SQS_POLLING_INTERVAL')
+    _log.info('SQS_POLLING_INTERVAL configuration loaded')
+except AirflowConfigException:
+    _log.info('SQS_POLLING_INTERVAL configuration was not loaded')
+
+SQS_QUEUE_NAME_PREFIX = None
+try:
+    SQS_QUEUE_NAME_PREFIX = configuration.get(
+        'celery',
+        'SQS_QUEUE_NAME_PREFIX')
+    _log.info('SQS_QUEUE_NAME_PREFIX configuration loaded')
+except AirflowConfigException:
+    _log.info('SQS_QUEUE_NAME_PREFIX configuration was not loaded')
+
 
 class CeleryConfig(object):
     CELERY_ACCEPT_CONTENT = ['json', 'pickle']
@@ -47,47 +83,16 @@ class CeleryConfig(object):
     CELERY_TASK_RESULT_EXPIRES = configuration.get(
         'celery',
         'CELERY_TASK_RESULT_EXPIRES')
-    BROKER_TRANSPORT_OPTIONS = {}
+    BROKER_TRANSPORT_OPTIONS = {
+        'region':SQS_REGION,
+        'visibility_timeout':SQS_VISIBILITY_TIMEOUT,
+        'polling_interval':SQS_POLLING_INTERVAL,
+        'queue_name_prefix':SQS_QUEUE_NAME_PREFIX
+        }
     CELERYD_CONCURRENCY = configuration.getint('celery', 'CELERYD_CONCURRENCY')
     CELERY_DEFAULT_QUEUE = DEFAULT_QUEUE
     CELERY_DEFAULT_EXCHANGE = DEFAULT_QUEUE
 
-    def __init__(self):
-        try:
-            self.BROKER_TRANSPORT_OPTIONS['region'] = configuration.get(
-                'celery',
-                'SQS_REGION')
-            _log.info('SQS_REGION configuration loaded')
-        except AirflowConfigException:
-            _log.info('SQS_REGION configuration was not loaded')
-            pass
-
-        try:
-            self.BROKER_TRANSPORT_OPTIONS['visibility_timeout'] = configuration.get(
-                'celery',
-                'SQS_VISIBILITY_TIMEOUT')
-            _log.info('SQS_VISIBILITY_TIMEOUT configuration loaded')
-        except AirflowConfigException:
-            _log.info('SQS_VISIBILITY_TIMEOUT configuration was not loaded')
-            pass
-
-        try:
-            self.BROKER_TRANSPORT_OPTIONS['polling_interval'] = configuration.get(
-                'celery',
-                'SQS_POLLING_INTERVAL')
-            _log.info('SQS_POLLING_INTERVAL configuration loaded')
-        except AirflowConfigException:
-            _log.info('SQS_POLLING_INTERVAL configuration was not loaded')
-            pass
-
-        try:
-            self.BROKER_TRANSPORT_OPTIONS['queue_name_prefix'] = configuration.get(
-                'celery',
-                'SQS_QUEUE_NAME_PREFIX')
-            _log.info('SQS_QUEUE_NAME_PREFIX configuration loaded')
-        except AirflowConfigException:
-            _log.info('SQS_QUEUE_NAME_PREFIX configuration was not loaded')
-            pass
 
 app = Celery(
     configuration.get('celery', 'CELERY_APP_NAME'),
