@@ -20,7 +20,7 @@ import time
 from celery import Celery
 from celery import states as celery_states
 
-from airflow.exceptions import AirflowException
+from airflow.exceptions import AirflowException, AirflowConfigException
 from airflow.executors.base_executor import BaseExecutor
 from airflow import configuration
 
@@ -47,9 +47,39 @@ class CeleryConfig(object):
     CELERY_TASK_RESULT_EXPIRES = configuration.get(
         'celery',
         'CELERY_TASK_RESULT_EXPIRES')
+    BROKER_TRANSPORT_OPTIONS = {}
     CELERYD_CONCURRENCY = configuration.getint('celery', 'CELERYD_CONCURRENCY')
     CELERY_DEFAULT_QUEUE = DEFAULT_QUEUE
     CELERY_DEFAULT_EXCHANGE = DEFAULT_QUEUE
+
+    def __init__(self):
+        try:
+            self.BROKER_TRANSPORT_OPTIONS['region'] = configuration.get(
+                'celery',
+                'SQS_REGION')
+        except AirflowConfigException:
+            pass
+
+        try:
+            self.BROKER_TRANSPORT_OPTIONS['visibility_timeout'] = configuration.get(
+                'celery',
+                'SQS_VISIBILITY_TIMEOUT')
+        except AirflowConfigException:
+            pass
+
+        try:
+            self.BROKER_TRANSPORT_OPTIONS['polling_interval'] = configuration.get(
+                'celery',
+                'SQS_POLLING_INTERVAL')
+        except AirflowConfigException:
+            pass
+
+        try:
+            self.BROKER_TRANSPORT_OPTIONS['queue_name_prefix'] = configuration.get(
+                'celery',
+                'SQS_QUEUE_NAME_PREFIX')
+        except AirflowConfigException:
+            pass
 
 app = Celery(
     configuration.get('celery', 'CELERY_APP_NAME'),
