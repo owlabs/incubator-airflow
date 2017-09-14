@@ -59,6 +59,7 @@ class CeleryConfig(object):
                 'SQS_REGION')
             _log.info('SQS_REGION configuration loaded')
         except AirflowConfigException:
+            _log.info('SQS_REGION configuration was not loaded')
             pass
 
         try:
@@ -67,6 +68,7 @@ class CeleryConfig(object):
                 'SQS_VISIBILITY_TIMEOUT')
             _log.info('SQS_VISIBILITY_TIMEOUT configuration loaded')
         except AirflowConfigException:
+            _log.info('SQS_VISIBILITY_TIMEOUT configuration was not loaded')
             pass
 
         try:
@@ -75,6 +77,7 @@ class CeleryConfig(object):
                 'SQS_POLLING_INTERVAL')
             _log.info('SQS_POLLING_INTERVAL configuration loaded')
         except AirflowConfigException:
+            _log.info('SQS_POLLING_INTERVAL configuration was not loaded')
             pass
 
         try:
@@ -83,6 +86,7 @@ class CeleryConfig(object):
                 'SQS_QUEUE_NAME_PREFIX')
             _log.info('SQS_QUEUE_NAME_PREFIX configuration loaded')
         except AirflowConfigException:
+            _log.info('SQS_QUEUE_NAME_PREFIX configuration was not loaded')
             pass
 
 app = Celery(
