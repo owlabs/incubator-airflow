@@ -93,7 +93,6 @@ class CeleryConfig(object):
     CELERY_DEFAULT_QUEUE = DEFAULT_QUEUE
     CELERY_DEFAULT_EXCHANGE = DEFAULT_QUEUE
 
-
 app = Celery(
     configuration.get('celery', 'CELERY_APP_NAME'),
     config_source=CeleryConfig)
