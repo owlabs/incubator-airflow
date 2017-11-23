@@ -70,9 +70,17 @@ def set_state(task, execution_date, upstream=False, downstream=False,
     """
     assert isinstance(execution_date, datetime.datetime)
 
+    ###########################################################
+    #  line 82 below was included (uncommented) in version 1.8.  
+    #  Problems were experienced finding tasks when setting 
+    #  their state to complete after failure.  
+    #  It was noted that these problems occured when non-zero
+    #  decimal seconds appeared in the tasks execution_date.  
+    #  The original comments begin here :
     # microseconds are supported by the database, but is not handled
     # correctly by airflow on e.g. the filesystem and in other places
-    execution_date = execution_date.replace(microsecond=0)
+    # execution_date = execution_date.replace(microsecond=0)     
+    ###########################################################
 
     assert task.dag is not None
     dag = task.dag
