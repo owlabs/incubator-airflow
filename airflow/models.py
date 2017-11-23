@@ -4189,7 +4189,7 @@ class DagRun(Base):
                 self.state = State.FAILED
 
             # if all roots succeeded and no unfinished tasks, the run succeeded
-            elif not unfinished_tasks and all(r.state in (State.SUCCESS, State.SKIPPED)
+            elif not unfinished_tasks and all(r.state in (State.SUCCESS, State.SKIPPED, State.EXCLUDED)
                                               for r in roots):
                 _log.info('Marking run {} successful'.format(self))
                 self.state = State.SUCCESS
