@@ -932,7 +932,7 @@ class TaskInstance(Base):
         iso = self.execution_date.isoformat()
         log = os.path.expanduser(configuration.get('core', 'BASE_LOG_FOLDER'))
         return (
-            "{log}/{self.dag_id}/{self.task_id}/{iso}.log".format(**locals()))
+            os.path.join(log, self.dag_id, self.task_id, "{iso}.log".format(**locals())))
 
     @property
     def log_url(self):
@@ -950,9 +950,9 @@ class TaskInstance(Base):
         iso = self.execution_date.isoformat()
         BASE_URL = configuration.get('webserver', 'BASE_URL')
         return BASE_URL + (
-            "/admin/airflow/action"
-            "?action=success"
-            "&task_id={self.task_id}"
+            "/admin/airflow/"
+            "success?"
+            "task_id={self.task_id}"
             "&dag_id={self.dag_id}"
             "&execution_date={iso}"
             "&upstream=false"
