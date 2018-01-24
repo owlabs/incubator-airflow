@@ -36,40 +36,42 @@ airflow worker
 DEFAULT_QUEUE = configuration.get('celery', 'DEFAULT_QUEUE')
 
 SQS_REGION = None
-try:
-    SQS_REGION = configuration.get(
-        'celery',
-        'SQS_REGION')
-    _log.info('SQS_REGION configuration loaded')
-except AirflowConfigException:
-    _log.info('SQS_REGION configuration was not loaded')
-
 SQS_VISIBILITY_TIMEOUT = None
-try:
-    SQS_VISIBILITY_TIMEOUT = configuration.get(
-        'celery',
-        'SQS_VISIBILITY_TIMEOUT')
-    _log.info('SQS_VISIBILITY_TIMEOUT configuration loaded')
-except AirflowConfigException:
-    _log.info('SQS_VISIBILITY_TIMEOUT configuration was not loaded')
-
 SQS_POLLING_INTERVAL = None
-try:
-    SQS_POLLING_INTERVAL = configuration.get(
-        'celery',
-        'SQS_POLLING_INTERVAL')
-    _log.info('SQS_POLLING_INTERVAL configuration loaded')
-except AirflowConfigException:
-    _log.info('SQS_POLLING_INTERVAL configuration was not loaded')
-
 SQS_QUEUE_NAME_PREFIX = None
-try:
-    SQS_QUEUE_NAME_PREFIX = configuration.get(
-        'celery',
-        'SQS_QUEUE_NAME_PREFIX')
-    _log.info('SQS_QUEUE_NAME_PREFIX configuration loaded')
-except AirflowConfigException:
-    _log.info('SQS_QUEUE_NAME_PREFIX configuration was not loaded')
+
+if configuration.get('celery', 'BROKER_URL').startswith('sqs'):
+    try:
+        SQS_REGION = configuration.get(
+            'celery',
+            'SQS_REGION')
+        _log.debug('SQS_REGION configuration loaded')
+    except AirflowConfigException:
+        _log.debug('SQS_REGION configuration was not loaded')
+
+    try:
+        SQS_VISIBILITY_TIMEOUT = configuration.get(
+            'celery',
+            'SQS_VISIBILITY_TIMEOUT')
+        _log.debug('SQS_VISIBILITY_TIMEOUT configuration loaded')
+    except AirflowConfigException:
+        _log.debug('SQS_VISIBILITY_TIMEOUT configuration was not loaded')
+
+    try:
+        SQS_POLLING_INTERVAL = configuration.get(
+            'celery',
+            'SQS_POLLING_INTERVAL')
+        _log.debug('SQS_POLLING_INTERVAL configuration loaded')
+    except AirflowConfigException:
+        _log.debug('SQS_POLLING_INTERVAL configuration was not loaded')
+
+    try:
+        SQS_QUEUE_NAME_PREFIX = configuration.get(
+            'celery',
+            'SQS_QUEUE_NAME_PREFIX')
+        _log.debug('SQS_QUEUE_NAME_PREFIX configuration loaded')
+    except AirflowConfigException:
+        _log.debug('SQS_QUEUE_NAME_PREFIX configuration was not loaded')
 
 
 class CeleryConfig(object):
