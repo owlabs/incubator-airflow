@@ -102,6 +102,12 @@ dags_folder = {AIRFLOW_HOME}/dags
 # This path must be absolute
 base_log_folder = {AIRFLOW_HOME}/logs
 
+# The following define the global logging behaviour
+clear_inherited_logging_settings = True
+log_to_debug_file = True
+log_to_error_file = True
+log_to_console = True
+
 # Airflow can store logs remotely in AWS S3 or Google Cloud Storage. Users
 # must supply a remote location URL (starting with either 's3://...' or
 # 'gs://...') and an Airflow connection id that provides access to the storage
