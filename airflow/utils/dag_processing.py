@@ -280,15 +280,6 @@ class AbstractDagFileProcessor(object):
 
     @property
     @abstractmethod
-    def log_file(self):
-        """
-        :return: the log file associated with this processor
-        :rtype: unicode
-        """
-        raise NotImplementedError()
-
-    @property
-    @abstractmethod
     def file_path(self):
         """
         :return: the path to the file that this is processing
@@ -336,7 +327,7 @@ class DagFileProcessorManager(LoggingMixin):
         :type child_process_log_directory: unicode
         :type process_file_interval: float
         :param processor_factory: function that creates processors for DAG
-        definition files. Arguments are (dag_definition_path, log_file_path)
+        definition files. Arguments are (dag_definition_path)
         :type processor_factory: (unicode, unicode) -> (AbstractDagFileProcessor)
 
         """
@@ -481,27 +472,6 @@ class DagFileProcessorManager(LoggingMixin):
         return os.path.join(self._child_process_log_directory,
             now.strftime("%Y-%m-%d"))
 
-    def _get_log_file_path(self, dag_file_path):
-        """
-        Log output from processing the specified file should go to this
-        location.
-
-        :param dag_file_path: file containing a DAG
-        :type dag_file_path: unicode
-        :return: the path to the corresponding log file
-        :rtype: unicode
-        """
-        log_directory = self._get_log_directory()
-        # General approach is to put the log file under the same relative path
-        # under the log directory as the DAG file in the DAG directory
-        relative_dag_file_path = os.path.relpath(dag_file_path, start=self._dag_directory)
-        path_elements = self._split_path(relative_dag_file_path)
-
-        # Add a .log suffix for the log file
-        path_elements[-1] += ".log"
-
-        return os.path.join(log_directory, *path_elements)
-
     def symlink_latest_log_directory(self):
         """
         Create symbolic link to the current day's log directory to
@@ -620,13 +590,12 @@ class DagFileProcessorManager(LoggingMixin):
         while (self._parallelism - len(self._processors) > 0 and
                len(self._file_path_queue) > 0):
             file_path = self._file_path_queue.pop(0)
-            log_file_path = self._get_log_file_path(file_path)
-            processor = self._processor_factory(file_path, log_file_path)
+            processor = self._processor_factory(file_path)
 
             processor.start()
             self.logger.info("Started a process (PID: {}) to generate "
-                             "tasks for {} - logging into {}"
-                             .format(processor.pid, file_path, log_file_path))
+                             "tasks for {}"
+                             .format(processor.pid, file_path))
 
             self._processors[file_path] = processor
 
