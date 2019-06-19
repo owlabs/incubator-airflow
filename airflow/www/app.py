@@ -27,6 +27,7 @@ from airflow import models
 from airflow.settings import Session
 
 from airflow.www.blueprints import routes
+from airflow.www.reverse_proxied import ReverseProxied
 from airflow import jobs
 from airflow import settings
 from airflow import configuration
@@ -35,6 +36,7 @@ _log = logging.getLogger(__name__)
 
 def create_app(config=None, testing=False):
     app = Flask(__name__)
+    app.wsgi_app = ReverseProxied(app.wsgi_app)
     app.secret_key = configuration.get('webserver', 'SECRET_KEY')
     app.config['LOGIN_DISABLED'] = not configuration.getboolean('webserver', 'AUTHENTICATE')
 

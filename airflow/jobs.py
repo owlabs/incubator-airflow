@@ -241,7 +241,7 @@ class DagFileProcessor(AbstractDagFileProcessor):
     # Counter that increments everytime an instance of this class is created
     class_creation_counter = 0
 
-    def __init__(self, file_path, pickle_dags, dag_id_white_list, log_file):
+    def __init__(self, file_path, pickle_dags, dag_id_white_list):
         """
         :param file_path: a Python file containing Airflow DAG definitions
         :type file_path: unicode
@@ -249,11 +249,8 @@ class DagFileProcessor(AbstractDagFileProcessor):
         :type pickle_dags: bool
         :param dag_id_whitelist: If specified, only look at these DAG ID's
         :type dag_id_whitelist: list[unicode]
-        :param log_file: the path to the file where log lines should be output
-        :type log_file: unicode
         """
         self._file_path = file_path
-        self._log_file = log_file
         # Queue that's used to pass results from the child process.
         self._result_queue = multiprocessing.Queue()
         # The process that was launched to process the given .
@@ -275,17 +272,12 @@ class DagFileProcessor(AbstractDagFileProcessor):
     def file_path(self):
         return self._file_path
 
-    @property
-    def log_file(self):
-        return self._log_file
-
     @staticmethod
     def _launch_process(result_queue,
                         file_path,
                         pickle_dags,
                         dag_id_white_list,
-                        thread_name,
-                        log_file):
+                        thread_name):
         """
         Launch a process to process the given file.
 
@@ -301,31 +293,11 @@ class DagFileProcessor(AbstractDagFileProcessor):
         :type dag_id_white_list: list[unicode]
         :param thread_name: the name to use for the process that is launched
         :type thread_name: unicode
-        :param log_file: the logging output for the process should be directed
-        to this file
-        :type log_file: unicode
         :return: the process that was launched
         :rtype: multiprocessing.Process
         """
         def helper():
             # This helper runs in the newly created process
-
-            # Re-direct stdout and stderr to a separate log file. Otherwise,
-            # the main log becomes too hard to read. No buffering to enable
-            # responsive file tailing
-            parent_dir, _ = os.path.split(log_file)
-
-            # Create the parent directory for the log file if necessary.
-            if not os.path.isdir(parent_dir):
-                os.makedirs(parent_dir)
-
-            f = open(log_file, "a")
-            original_stdout = sys.stdout
-            original_stderr = sys.stderr
-
-            sys.stdout = f
-            sys.stderr = f
-
             try:
                 # Update the logging configuration to include thread name.
                 thread_formatter = logging.Formatter(
@@ -357,10 +329,6 @@ class DagFileProcessor(AbstractDagFileProcessor):
                 # Log exceptions through the logging framework.
                 _log.exception("Got an exception! Propagating...")
                 raise
-            finally:
-                sys.stdout = original_stdout
-                sys.stderr = original_stderr
-                f.close()
 
         p = multiprocessing.Process(target=helper,
                                     args=(),
@@ -377,8 +345,7 @@ class DagFileProcessor(AbstractDagFileProcessor):
             self.file_path,
             self._pickle_dags,
             self._dag_id_white_list,
-            "DagFileProcessor{}".format(self._instance_id),
-            self.log_file)
+            "DagFileProcessor{}".format(self._instance_id))
         self._start_time = datetime.now()
 
     def terminate(self, sigkill=False):
@@ -1303,11 +1270,10 @@ class SchedulerJob(BaseJob):
         self.logger.info("There are {} files in {}"
                          .format(len(known_file_paths), self.subdir))
 
-        def processor_factory(file_path, log_file_path):
+        def processor_factory(file_path):
             return DagFileProcessor(file_path,
                                     pickle_dags,
-                                    self.dag_ids,
-                                    log_file_path)
+                                    self.dag_ids)
 
         processor_manager = DagFileProcessorManager(self.subdir,
                                                     known_file_paths,
